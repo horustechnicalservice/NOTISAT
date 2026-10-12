@@ -1093,6 +1093,7 @@
         Con la campana activada, la app avisa <strong>6 minutos antes</strong> de que un satélite pase por
         Misiones o por sus límites más cercanos (zona ampliada ~100 km).
         <button class="close-btn" id="btnTestAlert" type="button" style="margin-top:8px">PROBAR NOTIFICACIÓN</button>
+        <button class="close-btn" id="btnTestBg" type="button" style="margin-top:8px">PRUEBA EN SEGUNDO PLANO (60 s)</button>
       </div>
       <button class="close-btn" id="closeInfo">ENTENDIDO · NO CONFUNDIR CON OVNIS</button>
     </div>
@@ -2239,7 +2240,11 @@
       bufferKm: 100,     // margen alrededor de los límites de Misiones
       cooldownMin: 25,   // no repetir aviso del mismo satélite durante este tiempo
       checkSec: 10,      // cada cuántos segundos se revisa
-      stepSec: 15        // resolución de la predicción
+      stepSec: 15,       // resolución de la predicción
+      horizonH: 8,       // horas hacia adelante que se programan como alarmas nativas (Android)
+      groupSec: 180,     // pasos con alertas a menos de este tiempo se agrupan en UNA notificación
+      maxAlarms: 200,    // máximo de alarmas nativas programadas
+      excludeTypes: []   // tipos a ignorar, p. ej. ['comms'] para no avisar de Starlink
     };
     // Contorno aproximado de la provincia de Misiones [lon, lat]
     const MIS_POLY = [
@@ -2326,6 +2331,7 @@
       for (let c = 0; c < chunk; c++) {
         const idx = (misCursor + c) % src.length, sat = src[idx];
         if (!sat || !sat.satrec) continue;
+        if (A.excludeTypes && A.excludeTypes.indexOf(sat.type) >= 0) continue;
         const key = sat.name || ('sat' + idx);
         if ((misNotified[key] || 0) > now) continue;
         const p0 = getPos(sat.satrec, new Date(now));
@@ -2339,7 +2345,11 @@
           const eta = s * A.stepSec;
           misNotified[key] = now + A.cooldownMin * 60000;
           const when = eta === 0 ? 'ya está sobre la zona de Misiones' : ('llega a Misiones en ~' + formatCountdown(eta) + ' min');
-          misNotify('🛰️ Satélite cerca de Misiones', key + ' · ' + when + ' · alt. ' + Math.round(p.alt) + ' km', 'mis-' + key);
+          const tInMin = Math.round((now + eta * 1000) / 60000);
+          const covered = misNativeReady() && (misSchedIdx.has(key + '@' + tInMin) || misSchedIdx.has(key + '@' + (tInMin - 1)) || misSchedIdx.has(key + '@' + (tInMin + 1)));
+          const txt = key + ' · ' + when + ' · alt. ' + Math.round(p.alt) + ' km';
+          if (covered) misToast('🛰️ Satélite cerca de Misiones', txt);   // la alarma nativa ya envía la notificación del sistema
+          else misNotify('🛰️ Satélite cerca de Misiones', txt, 'mis-' + key);
           break;
         }
       }
@@ -2363,11 +2373,91 @@
       return 'Vigilando ' + src.length + ' objetos en HORA REAL (el reloj del mapa va x' + speed + ').' +
         (lines.length ? '\nPróximos pasos: ' + lines.slice(0, 3).join(' · ') : '\nSin pasos de estaciones en 24 h.');
     }
+    // ---------------------------------------------------------------------
+    // ALARMAS NATIVAS (Android): la página calcula los próximos pasos por Misiones y se los
+    // entrega a Android (AlarmManager), que dispara la notificación aunque la app esté en
+    // segundo plano, con la pantalla apagada o el WebView congelado.
+    // ---------------------------------------------------------------------
+    function misNativeReady() { return !!(window.Android && typeof window.Android.scheduleAlerts === 'function'); }
+    let misSchedIdx = new Set(), misSchedBusy = false;
+
+    // Busca los ingresos de un satélite a la zona entre start y end (salta tiempo cuando está lejos)
+    function misPassesForSat(sat, start, end, out) {
+      const A = MIS_ALERT, zoneR = A.bufferKm + 300, cd = 20 * 60000;
+      let t = start, guard = 0, first = true;
+      while (t < end && guard++ < 3000) {
+        const p = getPos(sat.satrec, new Date(t));
+        if (!p) { t += 120000; first = false; continue; }
+        const d = misHav(p.lat, p.lon, -26.9, -55.0);
+        if (d > zoneR) { t += Math.max(15000, (d - zoneR) / 9 * 1000); first = false; continue; }
+        if (misDistKm(p.lat, p.lon) <= A.bufferKm) {
+          if (first) {                       // ya está dentro ahora: lo maneja misCheck; esperar a que salga
+            let tt = t, g2 = 0;
+            while (tt < end && g2++ < 1200) {
+              const q = getPos(sat.satrec, new Date(tt));
+              if (!q || misDistKm(q.lat, q.lon) > A.bufferKm) break;
+              tt += 30000;
+            }
+            t = tt + 30000; first = false; continue;
+          }
+          out.push({ key: sat.name || 'SAT', type: sat.type, tIn: t, alt: p.alt });
+          t += cd; continue;
+        }
+        t += 10000; first = false;
+      }
+    }
+    async function misScheduleNative() {
+      if (!misEnabled || !misNativeReady() || misSchedBusy) return;
+      const src = misSource();
+      if (!src || !src.length) return;
+      misSchedBusy = true;
+      try {
+        const A = MIS_ALERT, now = Date.now(), end = now + A.horizonH * 3600000, events = [];
+        for (let i = 0; i < src.length; i++) {
+          const sat = src[i];
+          if (sat && sat.satrec && !(A.excludeTypes && A.excludeTypes.indexOf(sat.type) >= 0)) misPassesForSat(sat, now, end, events);
+          if (i % 40 === 39) await new Promise(r => setTimeout(r, 0));   // no trabar la interfaz
+        }
+        events.sort((a, b) => a.tIn - b.tIn);
+        const groups = []; let g = null;
+        for (const e of events) {
+          if (g && e.tIn - g.first <= A.groupSec * 1000) g.list.push(e);
+          else { g = { first: e.tIn, list: [e] }; groups.push(g); }
+        }
+        const hh = t => new Date(t).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+        const payload = [], idx = new Set();
+        for (const grp of groups) {
+          const at = grp.first - A.leadMin * 60000;
+          if (at <= now + 5000) continue;          // ya está dentro de la ventana: lo maneja misCheck
+          if (payload.length >= A.maxAlarms) break;
+          let body;
+          if (grp.list.length === 1) {
+            const e = grp.list[0];
+            body = e.key + ' · llega a Misiones en ~' + A.leadMin + ' min (' + hh(e.tIn) + ') · alt. ' + Math.round(e.alt) + ' km';
+          } else {
+            const names = grp.list.slice(0, 3).map(e => e.key);
+            body = grp.list.length + ' satélites cerca de Misiones en ~' + A.leadMin + ' min (' + hh(grp.first) + '): ' +
+              names.join(', ') + (grp.list.length > 3 ? ' y ' + (grp.list.length - 3) + ' más' : '');
+          }
+          payload.push({ id: 'mis-' + Math.round(at / 1000), at: Math.round(at), title: '🛰️ Satélite cerca de Misiones', body: body });
+          grp.list.forEach(e => idx.add(e.key + '@' + Math.round(e.tIn / 60000)));
+        }
+        window.Android.scheduleAlerts(JSON.stringify(payload));
+        misSchedIdx = idx;
+      } catch (e) { /* ignorar */ } finally { misSchedBusy = false; }
+    }
+
     async function misSetEnabled(on, silent) {
       misEnabled = on;
       if (misEls.btn) misEls.btn.classList.toggle('on', on);
       try { localStorage.setItem('misAlertOn', on ? '1' : '0'); } catch (e) {}
-      if (!on) { if (!silent) misToast('Alerta Misiones desactivada', 'No recibirás avisos de satélites sobre Misiones.'); return; }
+      if (!on) {
+        try { if (misNativeReady() && window.Android.cancelAlerts) window.Android.cancelAlerts(); } catch (e) {}
+        misSchedIdx = new Set();
+        if (!silent) misToast('Alerta Misiones desactivada', 'No recibirás avisos de satélites sobre Misiones.');
+        return;
+      }
+      setTimeout(misScheduleNative, 3000);
       try { if (window.Android && typeof window.Android.requestNotificationPermission === 'function') window.Android.requestNotificationPermission(); } catch (e) {}
       let perm = 'default';
       try { if ('Notification' in window) { perm = Notification.permission; if (perm === 'default') perm = await Notification.requestPermission(); } } catch (e) {}
@@ -2385,9 +2475,21 @@
       if (via === 'toast') misToast('Prueba (solo dentro de la app)', 'Falta el permiso de notificaciones del sistema.');
       else setTimeout(() => misToast('Estado de la alerta', misStatusText()), 4500);
     });
+    const btnTestBg = document.getElementById('btnTestBg');
+    if (btnTestBg) btnTestBg.addEventListener('click', () => {
+      if (window.Android && typeof window.Android.scheduleTestAlert === 'function') {
+        window.Android.scheduleTestAlert(60);
+        misToast('Prueba programada', 'Minimizá la app y apagá la pantalla: en 60 segundos debe llegar una notificación del teléfono.');
+      } else {
+        misToast('Falta actualizar la app Android', 'Esta app no tiene todavía el módulo de alarmas nativas (scheduleTestAlert).');
+      }
+    });
     try { if (localStorage.getItem('misAlertOn') === '1') misSetEnabled(true, true); } catch (e) {}
     setInterval(misCheck, 2000);
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) misCheck(true); });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) { misCheck(true); misScheduleNative(); } });
+    setInterval(misScheduleNative, 10 * 60 * 1000);   // reprogramar alarmas nativas con datos frescos
+    setTimeout(misScheduleNative, 20000);
+    setTimeout(misScheduleNative, 75000);
 
     function tick(ts) {
       if (!lastTick) lastTick = ts;
