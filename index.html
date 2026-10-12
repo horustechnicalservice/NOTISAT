@@ -481,6 +481,8 @@
       line-height: 1.1;
       font-family: Inter, system-ui, sans-serif;
     }
+    .sat-div-icon.mis-pin .sat-label { color:#ffd600; font-weight:700; }
+    .sat-div-icon.mis-pin svg { filter: drop-shadow(0 0 5px #ffd600); }
     .sat-icon-wrap.selected {
       filter: drop-shadow(0 0 12px #fff) drop-shadow(0 0 18px rgba(0,255,200,0.9));
       transform: scale(1.25);
@@ -1091,7 +1093,7 @@
       <div class="box" style="border-color:rgba(255,214,0,0.4)">
         <strong style="color:#ffd600">🔔 Alerta Misiones</strong><br/>
         Con la campana activada, la app avisa <strong>6 minutos antes</strong> de que un satélite pase por
-        Misiones o por sus límites más cercanos (zona ampliada ~100 km).
+        Misiones (solo el territorio de la provincia, sin margen).
         <button class="close-btn" id="btnTestAlert" type="button" style="margin-top:8px">PROBAR NOTIFICACIÓN</button>
         <button class="close-btn" id="btnTestBg" type="button" style="margin-top:8px">PRUEBA EN SEGUNDO PLANO (60 s)</button>
       </div>
@@ -1843,44 +1845,8 @@
       </div>`;
     }
 
-    function createSatellites(list, showGlobal) {
-      // Limpiar marcadores previos
-      satellites.forEach(sat => {
-        if (sat.marker) map.removeLayer(sat.marker);
-        if (sat.polyline) map.removeLayer(sat.polyline);
-        if (sat.pathAhead) map.removeLayer(sat.pathAhead);
-        if (sat.footprint) map.removeLayer(sat.footprint);
-      });
-      satellites = [];
-
-      const now = Date.now();
-      const result = [];
-      const useGlobal = !!showGlobal;
-      const MAX_MARKERS = 55;
-      let approachingCount = 0;
-
-      // Priorizar Starlink (trenes / tránsitos frecuentes) al dibujar
-      list = list.slice().sort((a, b) => {
-        const as = /starlink/i.test(a.name) ? 0 : 1;
-        const bs = /starlink/i.test(b.name) ? 0 : 1;
-        return as - bs;
-      });
-
-      for (let li = 0; li < list.length; li++) {
-        const sat = list[li];
-        const track = buildTrack(sat.satrec, now, 120, 45);
-
-        const pos = getPos(sat.satrec, new Date(now));
-        if (!pos) continue;
-
-        if (!useGlobal) {
-          const inRegion = pos.lat >= -56 && pos.lat <= -10 && pos.lon >= -78 && pos.lon <= -30;
-          const willPass = track.crosses && track.passWindows.length > 0;
-          if (!willPass && !inRegion) continue;
-        }
-        approachingCount++;
-        if (result.length >= MAX_MARKERS) continue;
-
+    // Crea marcador + línea de órbita de un satélite (usado al dibujar y al "fijar" los de la alerta Misiones)
+    function drawSatLayers(sat, pos, track, now) {
         const icon = L.divIcon({
           className: 'sat-div-icon',
           html: satIconSvg(sat.color || TYPE_COLORS[sat.type] || '#29b6f6', sat.type, sat.name),
@@ -1893,7 +1859,7 @@
         let polyline = null;
         const orbitColor = sat.color || TYPE_COLORS[sat.type] || '#29b6f6';
         const seg = [];
-        for (let t = -15; t <= 25; t += 2.5) {
+        for (let t = -15; t <= (misAhead[sat.name] || 25); t += 2.5) {
           const p = getPos(sat.satrec, new Date(now + t * 60000));
           if (p) seg.push([p.lat, p.lon]);
         }
@@ -1917,6 +1883,64 @@
         sat.track = track;
         sat._trackOrigin = now;
         sat.currentPos = pos;
+    }
+
+    // Satélites que la alerta Misiones marcó: se dibujan SIEMPRE, aunque no entren en el tope de 55
+    const misAhead = {};  // nombre -> minutos de órbita a dibujar hacia adelante (hasta que salga de Misiones)
+    const misPins = {};   // nombre -> hasta cuándo (ms) debe seguir dibujado
+    function misIsPinned(sat, now) { return (misPins[sat.name] || 0) > (now || Date.now()); }
+    function pinSatOnMap(sat, untilMs) {
+      misPins[sat.name] = Math.max(misPins[sat.name] || 0, untilMs);
+      if (!map || satellites.indexOf(sat) >= 0 || !sat.satrec) return;
+      const now = Date.now(), pos = getPos(sat.satrec, new Date(now));
+      if (!pos) return;
+      drawSatLayers(sat, pos, buildTrack(sat.satrec, now, 120, 45), now);
+      satellites.push(sat);
+      const icon = sat.marker && sat.marker.getElement && sat.marker.getElement();
+      if (icon) icon.classList.add('mis-pin');
+    }
+
+    function createSatellites(list, showGlobal) {
+      // Limpiar marcadores previos
+      satellites.forEach(sat => {
+        if (sat.marker) map.removeLayer(sat.marker);
+        if (sat.polyline) map.removeLayer(sat.polyline);
+        if (sat.pathAhead) map.removeLayer(sat.pathAhead);
+        if (sat.footprint) map.removeLayer(sat.footprint);
+      });
+      satellites = [];
+
+      const now = Date.now();
+      const result = [];
+      const useGlobal = !!showGlobal;
+      const MAX_MARKERS = 55;
+      let approachingCount = 0;
+
+      // Priorizar Starlink (trenes / tránsitos frecuentes) al dibujar
+      try { misPrioritize(list, false); } catch (e) {}
+      list = list.slice().sort((a, b) => {
+        const as = misIsPinned(a) ? -1 : (/starlink/i.test(a.name) ? 0 : 1);
+        const bs = misIsPinned(b) ? -1 : (/starlink/i.test(b.name) ? 0 : 1);
+        return as - bs;
+      });
+
+      for (let li = 0; li < list.length; li++) {
+        const sat = list[li];
+        const track = buildTrack(sat.satrec, now, 120, 45);
+
+        const pos = getPos(sat.satrec, new Date(now));
+        if (!pos) continue;
+
+        const pinned = misIsPinned(sat, now);
+        if (!useGlobal && !pinned) {
+          const inRegion = pos.lat >= -56 && pos.lat <= -10 && pos.lon >= -78 && pos.lon <= -30;
+          const willPass = track.crosses && track.passWindows.length > 0;
+          if (!willPass && !inRegion) continue;
+        }
+        approachingCount++;
+        if (result.length >= MAX_MARKERS && !pinned) continue;
+
+        drawSatLayers(sat, pos, track, now);
         result.push(sat);
       }
 
@@ -1950,7 +1974,7 @@
         if (sat.marker) sat.marker.setLatLng([pos.lat, pos.lon]);
         if (updateOrbits && sat.polyline) {
           const seg = [];
-          for (let t = -15; t <= 25; t += 3) {
+          for (let t = -15; t <= (misAhead[sat.name] || 25); t += 3) {
             const p = getPos(sat.satrec, new Date(simTime + t * 60000));
             if (p) seg.push([p.lat, p.lon]);
           }
@@ -2237,10 +2261,11 @@
     // =====================================================================
     const MIS_ALERT = {
       leadMin: 6,        // minutos de anticipación
-      bufferKm: 100,     // margen alrededor de los límites de Misiones
+      bufferKm: 0,       // 0 = solo el territorio de Misiones, sin margen
       cooldownMin: 25,   // no repetir aviso del mismo satélite durante este tiempo
       checkSec: 10,      // cada cuántos segundos se revisa
-      stepSec: 15,       // resolución de la predicción
+      stepSec: 5,        // resolución de la predicción (5 s ≈ 37 km: no se escapa ningún cruce)
+      priorityMin: 90,   // minutos hacia adelante: todo satélite que cruce Misiones en este lapso se dibuja con prioridad total
       horizonH: 8,       // horas hacia adelante que se programan como alarmas nativas (Android)
       groupSec: 180,     // pasos con alertas a menos de este tiempo se agrupan en UNA notificación
       maxAlarms: 200,    // máximo de alarmas nativas programadas
@@ -2268,6 +2293,59 @@
       }
       return best;
     }
+
+
+
+    // ---------------------------------------------------------------------
+    // PRIORIDAD MISIONES: todo satélite que vaya a cruzar el territorio de Misiones en los próximos
+    // MIS_ALERT.priorityMin minutos se dibuja SIEMPRE (antes que Starlink y sin tope de 55), con su
+    // órbita extendida hasta que salga de la provincia. El resto de los satélites se muestran normal.
+    // ---------------------------------------------------------------------
+    function misNextTransit(sat, from, to) {
+      const A = MIS_ALERT, zoneR = 300 + A.bufferKm, step = 4000;
+      let t = from, guard = 0, tIn = null;
+      while (t <= to && guard++ < 5000) {
+        const p = getPos(sat.satrec, new Date(t));
+        if (!p) { if (tIn !== null) return { tIn, tOut: t }; t += 60000; continue; }
+        if (misDistKm(p.lat, p.lon) <= A.bufferKm) { if (tIn === null) tIn = t; t += step; continue; }
+        if (tIn !== null) return { tIn, tOut: t };
+        const d = misHav(p.lat, p.lon, -26.9, -55.0);
+        if (d > zoneR) { t += Math.max(15000, (d - zoneR) / 9 * 1000); continue; }
+        t += step;
+      }
+      return tIn !== null ? { tIn, tOut: Math.min(t, to) } : null;
+    }
+    function misPrioritize(list, draw) {
+      const A = MIS_ALERT, now = Date.now(), to = now + A.priorityMin * 60000;
+      let n = 0;
+      for (let i = 0; i < list.length; i++) {
+        const sat = list[i];
+        if (!sat || !sat.satrec) continue;
+        const r = misNextTransit(sat, now, to);
+        if (!r) continue;
+        const until = r.tOut + 5 * 60000;
+        misAhead[sat.name] = Math.min(150, Math.ceil((r.tOut - now) / 60000) + 5);
+        misPins[sat.name] = Math.max(misPins[sat.name] || 0, until);
+        if (draw) pinSatOnMap(sat, until);
+        n++;
+      }
+      return n;
+    }
+    let misScanBusy = false;
+    async function misPriorityScan() {
+      if (misScanBusy || !map) return;
+      const src = misSource();
+      if (!src || !src.length) return;
+      misScanBusy = true;
+      try {
+        for (let i = 0; i < src.length; i += 150) {
+          misPrioritize(src.slice(i, i + 150), true);
+          await new Promise(r => setTimeout(r, 0));   // no trabar la interfaz
+        }
+      } catch (e) { /* ignorar */ } finally { misScanBusy = false; }
+    }
+    setInterval(misPriorityScan, 45000);
+    setTimeout(misPriorityScan, 4000);
 
     let misEnabled = false;
     const misNotified = {};
@@ -2344,7 +2422,12 @@
           if (!p || misDistKm(p.lat, p.lon) > A.bufferKm) continue;
           const eta = s * A.stepSec;
           misNotified[key] = now + A.cooldownMin * 60000;
-          const when = eta === 0 ? 'ya está sobre la zona de Misiones' : ('llega a Misiones en ~' + formatCountdown(eta) + ' min');
+          const dNow = misDistKm(p0.lat, p0.lon);
+          const when = eta === 0
+            ? (dNow === 0 ? 'está sobre Misiones' : 'está a ~' + Math.round(dNow) + ' km de Misiones')
+            : ('llega a Misiones en ~' + formatCountdown(eta) + ' min');
+          // Dibujarlo en el mapa (con su órbita) aunque no estuviera entre los 55 que se muestran
+          try { pinSatOnMap(sat, now + eta * 1000 + 20 * 60000); } catch (e) {}
           const tInMin = Math.round((now + eta * 1000) / 60000);
           const covered = misNativeReady() && (misSchedIdx.has(key + '@' + tInMin) || misSchedIdx.has(key + '@' + (tInMin - 1)) || misSchedIdx.has(key + '@' + (tInMin + 1)));
           const txt = key + ' · ' + when + ' · alt. ' + Math.round(p.alt) + ' km';
@@ -2360,7 +2443,7 @@
     function misStatusText() {
       const src = misSource(), now = Date.now(), A = MIS_ALERT, lines = [];
       src.filter(x => x.type === 'station').forEach(sat => {
-        for (let t = 0; t <= 24 * 3600; t += 30) {
+        for (let t = 0; t <= 24 * 3600; t += 10) {
           const p = getPos(sat.satrec, new Date(now + t * 1000));
           if (p && misDistKm(p.lat, p.lon) <= A.bufferKm) {
             const at = new Date(now + t * 1000);
@@ -2403,7 +2486,7 @@
           out.push({ key: sat.name || 'SAT', type: sat.type, tIn: t, alt: p.alt });
           t += cd; continue;
         }
-        t += 10000; first = false;
+        t += 4000; first = false;
       }
     }
     async function misScheduleNative() {
