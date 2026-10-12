@@ -482,7 +482,6 @@
       font-family: Inter, system-ui, sans-serif;
     }
     .sat-div-icon.mis-pin .sat-label { color:#ffd600; font-weight:700; }
-    .sat-div-icon.mis-pin svg { filter: drop-shadow(0 0 5px #ffd600); }
     .sat-icon-wrap.selected {
       filter: drop-shadow(0 0 12px #fff) drop-shadow(0 0 18px rgba(0,255,200,0.9));
       transform: scale(1.25);
@@ -1845,106 +1844,146 @@
       </div>`;
     }
 
-    // Crea marcador + línea de órbita de un satélite (usado al dibujar y al "fijar" los de la alerta Misiones)
-    function drawSatLayers(sat, pos, track, now) {
-        const icon = L.divIcon({
-          className: 'sat-div-icon',
-          html: satIconSvg(sat.color || TYPE_COLORS[sat.type] || '#29b6f6', sat.type, sat.name),
-          iconSize: [100, 40], iconAnchor: [50, 14]
-        });
-        const marker = L.marker([pos.lat, pos.lon], { icon, zIndexOffset: 600 }).addTo(map);
-        marker.on('click', () => selectSat(sat));
-
-        // Línea de órbita (versión anterior, simple y clara)
-        let polyline = null;
-        const orbitColor = sat.color || TYPE_COLORS[sat.type] || '#29b6f6';
-        const seg = [];
-        for (let t = -15; t <= (misAhead[sat.name] || 25); t += 2.5) {
-          const p = getPos(sat.satrec, new Date(now + t * 60000));
-          if (p) seg.push([p.lat, p.lon]);
-        }
-        if (seg.length >= 2) {
-          polyline = L.polyline(splitVisible(seg), {
-            color: orbitColor,
-            weight: 1.5,
-            opacity: 0.55,
-            lineCap: 'round',
-            lineJoin: 'round',
-            smoothFactor: 1.5,
-            className: 'sat-trail',
-            interactive: false
-          }).addTo(map);
-        }
-
-        sat.marker = marker;
-        sat.polyline = polyline;
-        sat.pathAhead = null;
-        sat.footprint = null;
-        sat.track = track;
-        sat._trackOrigin = now;
-        sat.currentPos = pos;
-    }
-
-    // Satélites que la alerta Misiones marcó: se dibujan SIEMPRE, aunque no entren en el tope de 55
-    const misAhead = {};  // nombre -> minutos de órbita a dibujar hacia adelante (hasta que salga de Misiones)
-    const misPins = {};   // nombre -> hasta cuándo (ms) debe seguir dibujado
+    // Registro de TODO satélite dibujado (nombre -> objeto). Sirve para limpiar siempre sin dejar marcadores
+    // huérfanos (un marcador que ya no está en `satellites` nadie lo mueve y se ve "trabado").
+    const drawnByName = new Map();
+    const misAhead = {};  // nombre -> minutos de órbita a dibujar hacia adelante (hasta que salga de la zona)
+    const misPins = {};   // nombre -> hasta cuándo (ms) tiene prioridad de dibujo
     function misIsPinned(sat, now) { return (misPins[sat.name] || 0) > (now || Date.now()); }
-    function pinSatOnMap(sat, untilMs) {
-      misPins[sat.name] = Math.max(misPins[sat.name] || 0, untilMs);
-      if (!map || satellites.indexOf(sat) >= 0 || !sat.satrec) return;
-      const now = Date.now(), pos = getPos(sat.satrec, new Date(now));
-      if (!pos) return;
-      drawSatLayers(sat, pos, buildTrack(sat.satrec, now, 120, 45), now);
-      satellites.push(sat);
-      const icon = sat.marker && sat.marker.getElement && sat.marker.getElement();
-      if (icon) icon.classList.add('mis-pin');
+    function okPos(p) { return !!p && isFinite(p.lat) && isFinite(p.lon); }
+
+    function removeSatLayers(sat) {
+      try { if (sat.marker && map) map.removeLayer(sat.marker); } catch (e) {}
+      try { if (sat.polyline && map) map.removeLayer(sat.polyline); } catch (e) {}
+      try { if (sat.pathAhead && map) map.removeLayer(sat.pathAhead); } catch (e) {}
+      try { if (sat.footprint && map) map.removeLayer(sat.footprint); } catch (e) {}
+      sat.marker = null; sat.polyline = null; sat.pathAhead = null; sat.footprint = null;
     }
+    function clearAllDrawn() {
+      drawnByName.forEach(removeSatLayers);
+      drawnByName.clear();
+      satellites.forEach(removeSatLayers);   // por las dudas
+      satellites = [];
+    }
+
+    // Crea marcador + línea de órbita de un satélite
+    function drawSatLayers(sat, pos, track, now) {
+      removeSatLayers(sat);
+      const icon = L.divIcon({
+        className: 'sat-div-icon',
+        html: satIconSvg(sat.color || TYPE_COLORS[sat.type] || '#29b6f6', sat.type, sat.name),
+        iconSize: [100, 40], iconAnchor: [50, 14]
+      });
+      const marker = L.marker([pos.lat, pos.lon], { icon, zIndexOffset: 600 }).addTo(map);
+      sat.marker = marker;
+      drawnByName.set(sat.name, sat);          // registrado ANTES de seguir: si algo falla, se puede limpiar
+      marker.on('click', () => selectSat(sat));
+
+      // Línea de órbita
+      let polyline = null;
+      const orbitColor = sat.color || TYPE_COLORS[sat.type] || '#29b6f6';
+      const seg = [];
+      for (let t = -15; t <= (misAhead[sat.name] || 25); t += 2.5) {
+        const p = getPos(sat.satrec, new Date(now + t * 60000));
+        if (okPos(p)) seg.push([p.lat, p.lon]);
+      }
+      if (seg.length >= 2) {
+        polyline = L.polyline(splitVisible(seg), {
+          color: orbitColor, weight: 1.5, opacity: 0.55, lineCap: 'round', lineJoin: 'round',
+          smoothFactor: 1.5, className: 'sat-trail', interactive: false
+        }).addTo(map);
+      }
+      sat.polyline = polyline;
+      sat.pathAhead = null;
+      sat.footprint = null;
+      sat.track = track;
+      sat._trackOrigin = now;
+      sat.currentPos = pos;
+    }
+
+    // Satélite con prioridad Misiones: se dibuja siempre (si todavía no está en el mapa)
+    function drawPinned(sat) {
+      if (!map || !detectionOn || !sat || !sat.satrec) return;
+      if (drawnByName.has(sat.name)) return;     // ya está dibujado (evita duplicados)
+      const now = Date.now(), pos = getPos(sat.satrec, new Date(now));
+      if (!okPos(pos)) return;
+      try {
+        drawSatLayers(sat, pos, buildTrack(sat.satrec, now, 120, 45), now);
+        sat._pinDrawn = true;
+        satellites.push(sat);
+      } catch (e) {
+        removeSatLayers(sat); drawnByName.delete(sat.name);
+      }
+    }
+    // Quita los que se dibujaron solo por prioridad y ya terminaron su paso; refresca el resaltado
+    function misUnpinExpired() {
+      const now = Date.now();
+      satellites = satellites.filter(s => {
+        if (s._pinDrawn && !misIsPinned(s, now) && s !== selectedSat) {
+          removeSatLayers(s); drawnByName.delete(s.name); s._pinDrawn = false;
+          return false;
+        }
+        return true;
+      });
+      satellites.forEach(s => {
+        try { const el = s.marker && s.marker.getElement && s.marker.getElement(); if (el) el.classList.toggle('mis-pin', misIsPinned(s, now)); } catch (e) {}
+      });
+    }
+    let misCatVer = 0;   // sube cada vez que se reconstruyen los satélites (invalida barridos en curso)
 
     function createSatellites(list, showGlobal) {
-      // Limpiar marcadores previos
-      satellites.forEach(sat => {
-        if (sat.marker) map.removeLayer(sat.marker);
-        if (sat.polyline) map.removeLayer(sat.polyline);
-        if (sat.pathAhead) map.removeLayer(sat.pathAhead);
-        if (sat.footprint) map.removeLayer(sat.footprint);
-      });
-      satellites = [];
+      misCatVer++;
+      clearAllDrawn();                          // limpia TODO lo dibujado (registro + lista)
 
       const now = Date.now();
       const result = [];
       const useGlobal = !!showGlobal;
-      const MAX_MARKERS = 55;
-      let approachingCount = 0;
+      const MAX_MARKERS = 55;                   // tope de los satélites "normales" (los prioritarios van aparte)
+      let approachingCount = 0, normalCount = 0;
 
-      // Priorizar Starlink (trenes / tránsitos frecuentes) al dibujar
-      try { misPrioritize(list, false); } catch (e) {}
+      // Prioridad Misiones: los que van a cruzar la zona (máx. MIS_ALERT.maxPriority, los más próximos)
+      try { const out = []; misCollect(list, out); misApplyPins(out); } catch (e) {}
+      // Priorizar: 1) Misiones  2) Starlink (trenes / tránsitos frecuentes)  3) resto
       list = list.slice().sort((a, b) => {
-        const as = misIsPinned(a) ? -1 : (/starlink/i.test(a.name) ? 0 : 1);
-        const bs = misIsPinned(b) ? -1 : (/starlink/i.test(b.name) ? 0 : 1);
+        const as = misIsPinned(a, now) ? -1 : (/starlink/i.test(a.name) ? 0 : 1);
+        const bs = misIsPinned(b, now) ? -1 : (/starlink/i.test(b.name) ? 0 : 1);
         return as - bs;
       });
 
-      for (let li = 0; li < list.length; li++) {
-        const sat = list[li];
-        const track = buildTrack(sat.satrec, now, 120, 45);
+      try {
+        for (let li = 0; li < list.length; li++) {
+          const sat = list[li];
+          // Un satélite con problemas NUNCA debe abortar la reconstrucción de todos los demás
+          try {
+            if (!sat || !sat.satrec || drawnByName.has(sat.name)) continue;
+            const pos = getPos(sat.satrec, new Date(now));
+            if (!okPos(pos)) continue;
+            const track = buildTrack(sat.satrec, now, 120, 45);
 
-        const pos = getPos(sat.satrec, new Date(now));
-        if (!pos) continue;
+            const pinned = misIsPinned(sat, now);
+            let normalOk = true;
+            if (!useGlobal) {
+              const inRegion = pos.lat >= -56 && pos.lat <= -10 && pos.lon >= -78 && pos.lon <= -30;
+              const willPass = track.crosses && track.passWindows.length > 0;
+              normalOk = inRegion || willPass;
+            }
+            if (!normalOk && !pinned) continue;
+            approachingCount++;
+            const asNormal = normalOk && normalCount < MAX_MARKERS;
+            if (!asNormal && !pinned) continue;
+            if (asNormal) normalCount++;
 
-        const pinned = misIsPinned(sat, now);
-        if (!useGlobal && !pinned) {
-          const inRegion = pos.lat >= -56 && pos.lat <= -10 && pos.lon >= -78 && pos.lon <= -30;
-          const willPass = track.crosses && track.passWindows.length > 0;
-          if (!willPass && !inRegion) continue;
+            drawSatLayers(sat, pos, track, now);
+            sat._pinDrawn = pinned && !asNormal;
+            result.push(sat);
+            if (pinned) { const el = sat.marker.getElement && sat.marker.getElement(); if (el) el.classList.add('mis-pin'); }
+          } catch (e) {
+            if (sat) { removeSatLayers(sat); drawnByName.delete(sat.name); }
+          }
         }
-        approachingCount++;
-        if (result.length >= MAX_MARKERS && !pinned) continue;
-
-        drawSatLayers(sat, pos, track, now);
-        result.push(sat);
+      } finally {
+        satellites = result;                    // siempre queda consistente con lo que hay en el mapa
       }
-
-      satellites = result;
       updateSatCountLabel(approachingCount, useGlobal);
       return satellites;
     }
@@ -1963,23 +2002,33 @@
 
     function updateTracksAndMarkers() {
       const d = new Date(simTime);
-      const n = satellites.length;
+      const list = satellites, n = list.length;
       tick._frame = (tick._frame || 0) + 1;
       const updateOrbits = (tick._frame % 10 === 0);
       for (let i = 0; i < n; i++) {
-        const sat = satellites[i];
-        const pos = getPos(sat.satrec, d);
-        if (!pos) continue;
-        sat.currentPos = pos;
-        if (sat.marker) sat.marker.setLatLng([pos.lat, pos.lon]);
-        if (updateOrbits && sat.polyline) {
-          const seg = [];
-          for (let t = -15; t <= (misAhead[sat.name] || 25); t += 3) {
-            const p = getPos(sat.satrec, new Date(simTime + t * 60000));
-            if (p) seg.push([p.lat, p.lon]);
+        const sat = list[i];
+        // Cada satélite va en su propio try: uno que falle no frena a los demás ni al bucle de animación
+        try {
+          const pos = getPos(sat.satrec, d);
+          if (!okPos(pos)) {
+            // Sin posición válida: se oculta en vez de quedar congelado en pantalla
+            if (sat.marker && map.hasLayer(sat.marker)) map.removeLayer(sat.marker);
+            continue;
           }
-          if (seg.length >= 2) sat.polyline.setLatLngs(splitVisible(seg));
-        }
+          sat.currentPos = pos;
+          if (sat.marker) {
+            sat.marker.setLatLng([pos.lat, pos.lon]);
+            if (detectionOn && !map.hasLayer(sat.marker)) sat.marker.addTo(map);
+          }
+          if (updateOrbits && sat.polyline) {
+            const seg = [];
+            for (let t = -15; t <= (misAhead[sat.name] || 25); t += 3) {
+              const p = getPos(sat.satrec, new Date(simTime + t * 60000));
+              if (okPos(p)) seg.push([p.lat, p.lon]);
+            }
+            if (seg.length >= 2) sat.polyline.setLatLngs(splitVisible(seg));
+          }
+        } catch (e) { /* ignorar este satélite */ }
       }
     }
 
@@ -2265,6 +2314,7 @@
       cooldownMin: 25,   // no repetir aviso del mismo satélite durante este tiempo
       checkSec: 10,      // cada cuántos segundos se revisa
       stepSec: 5,        // resolución de la predicción (5 s ≈ 37 km: no se escapa ningún cruce)
+      maxPriority: 24,   // tope de satélites con prioridad de dibujo (los que cruzan antes); evita saturar el teléfono
       priorityMin: 90,   // minutos hacia adelante: todo satélite que cruce Misiones en este lapso se dibuja con prioridad total
       horizonH: 8,       // horas hacia adelante que se programan como alarmas nativas (Android)
       groupSec: 180,     // pasos con alertas a menos de este tiempo se agrupan en UNA notificación
@@ -2316,21 +2366,30 @@
       }
       return tIn !== null ? { tIn, tOut: Math.min(t, to) } : null;
     }
-    function misPrioritize(list, draw) {
+    // Junta (sin dibujar) los satélites que van a cruzar la zona dentro del horizonte
+    function misCollect(list, out) {
       const A = MIS_ALERT, now = Date.now(), to = now + A.priorityMin * 60000;
-      let n = 0;
       for (let i = 0; i < list.length; i++) {
         const sat = list[i];
         if (!sat || !sat.satrec) continue;
-        const r = misNextTransit(sat, now, to);
-        if (!r) continue;
-        const until = r.tOut + 5 * 60000;
-        misAhead[sat.name] = Math.min(150, Math.ceil((r.tOut - now) / 60000) + 5);
-        misPins[sat.name] = Math.max(misPins[sat.name] || 0, until);
-        if (draw) pinSatOnMap(sat, until);
-        n++;
+        try {
+          const r = misNextTransit(sat, now, to);
+          if (r) out.push({ sat: sat, tIn: r.tIn, tOut: r.tOut });
+        } catch (e) { /* ignorar */ }
       }
-      return n;
+    }
+    // Se quedan con prioridad los más próximos (tope maxPriority) para no saturar el teléfono
+    function misApplyPins(out) {
+      const now = Date.now();
+      out.sort((a, b) => a.tIn - b.tIn);
+      const keep = out.slice(0, MIS_ALERT.maxPriority);
+      Object.keys(misPins).forEach(k => delete misPins[k]);
+      Object.keys(misAhead).forEach(k => delete misAhead[k]);
+      keep.forEach(e => {
+        misPins[e.sat.name] = e.tOut + 5 * 60000;
+        misAhead[e.sat.name] = Math.min(150, Math.ceil((e.tOut - now) / 60000) + 5);
+      });
+      return keep;
     }
     let misScanBusy = false;
     async function misPriorityScan() {
@@ -2338,11 +2397,16 @@
       const src = misSource();
       if (!src || !src.length) return;
       misScanBusy = true;
+      const ver = misCatVer, out = [];
       try {
-        for (let i = 0; i < src.length; i += 150) {
-          misPrioritize(src.slice(i, i + 150), true);
-          await new Promise(r => setTimeout(r, 0));   // no trabar la interfaz
+        for (let i = 0; i < src.length; i += 100) {
+          misCollect(src.slice(i, i + 100), out);
+          await new Promise(r => setTimeout(r, 0));          // no trabar la interfaz
+          if (ver !== misCatVer) return;                     // se reconstruyó el catálogo: ese ya aplicó sus prioridades
         }
+        const keep = misApplyPins(out);
+        keep.forEach(e => drawPinned(e.sat));
+        misUnpinExpired();
       } catch (e) { /* ignorar */ } finally { misScanBusy = false; }
     }
     setInterval(misPriorityScan, 45000);
@@ -2428,7 +2492,11 @@
             ? (dNow === 0 ? 'está sobre Misiones' : 'está a ~' + Math.round(dNow) + ' km de Misiones')
             : ('llega a Misiones en ~' + formatCountdown(eta) + ' min');
           // Dibujarlo en el mapa (con su órbita) aunque no estuviera entre los 55 que se muestran
-          try { pinSatOnMap(sat, now + eta * 1000 + 20 * 60000); } catch (e) {}
+          try {
+            misPins[sat.name] = Math.max(misPins[sat.name] || 0, now + eta * 1000 + 20 * 60000);
+            misAhead[sat.name] = Math.max(misAhead[sat.name] || 0, Math.ceil(eta / 60) + 15);
+            drawPinned(sat);
+          } catch (e) {}
           const tInMin = Math.round((now + eta * 1000) / 60000);
           const covered = misNativeReady() && (misSchedIdx.has(key + '@' + tInMin) || misSchedIdx.has(key + '@' + (tInMin - 1)) || misSchedIdx.has(key + '@' + (tInMin + 1)));
           const txt = key + ' · ' + when + ' · alt. ' + Math.round(p.alt) + ' km';
@@ -2575,49 +2643,52 @@
     setTimeout(misScheduleNative, 20000);
     setTimeout(misScheduleNative, 75000);
 
-    function tick(ts) {
-      if (!lastTick) lastTick = ts;
-      const dt = Math.min(ts - lastTick, 50);
-      lastTick = ts;
+    function tick(ts, tokArg) {
+      const tok = (typeof tokArg === 'number') ? tokArg : tick._token;
+      if (tok !== tick._token) return;           // bucle viejo reemplazado por el vigilante
+      tick._at = Date.now();
+      const st = (f) => { try { f(); } catch (e) { console.error(e); } };
+      try {
+        if (!lastTick) lastTick = ts;
+        const dt = Math.min(ts - lastTick, 50);
+        lastTick = ts;
 
-      // Solo AVANZA el tiempo (nunca vuelve atrás)
-      if (!paused) {
-        if (speed === 1) {
-          // Hora real: el reloj del mapa sale SIEMPRE del reloj del teléfono. Así, al salir y volver a
-          // entrar (o actualizar), cada satélite está donde está de verdad: en el mismo punto o más adelante,
-          // nunca en un estado anterior. Math.max evita retrocesos si cambia el reloj del equipo.
-          simTime = Math.max(simTime, Date.now());
-        } else {
-          simTime += dt * speed;
+        // Solo AVANZA el tiempo (nunca vuelve atrás)
+        if (!paused) {
+          if (speed === 1) {
+            // Hora real: el reloj del mapa sale SIEMPRE del reloj del teléfono.
+            simTime = Math.max(simTime, Date.now());
+          } else {
+            simTime += dt * speed;
+          }
         }
-      }
 
-      updateTracksAndMarkers();
-
-      if (!tick._lastScan || ts - tick._lastScan > 700) {
-        tick._lastScan = ts;
-        updateScan(ts);
+        st(updateTracksAndMarkers);
+        if (!tick._lastScan || ts - tick._lastScan > 700) { tick._lastScan = ts; st(() => updateScan(ts)); }
+        if (!tick._lastNP || ts - tick._lastNP > 2000) { tick._lastNP = ts; st(updateNextPass); }
+        if (!tick._lastUI || ts - tick._lastUI > 5000) {
+          tick._lastUI = ts;
+          st(updateOverList);
+          st(updateTimeline);
+        }
+        // Recalcular ventanas de pase hacia adelante (sin reiniciar el reloj)
+        if (!tick._lastPassRefresh || ts - tick._lastPassRefresh > 25000) { tick._lastPassRefresh = ts; st(refreshPassWindows); }
+        if (tleMode === 'live' && (!tick._lastTle || ts - tick._lastTle > 720000)) { tick._lastTle = ts; st(refreshLiveTleQuiet); }
+      } finally {
+        // Pase lo que pase, el bucle SIGUE: un error aislado ya no congela todos los satélites
+        requestAnimationFrame(t => tick(t, tok));
       }
-      if (!tick._lastNP || ts - tick._lastNP > 2000) {
-        tick._lastNP = ts;
-        updateNextPass();
-      }
-      if (!tick._lastUI || ts - tick._lastUI > 5000) {
-        tick._lastUI = ts;
-        updateOverList();
-        updateTimeline();
-      }
-      // Recalcular ventanas de pase hacia adelante (sin reiniciar el reloj)
-      if (!tick._lastPassRefresh || ts - tick._lastPassRefresh > 25000) {
-        tick._lastPassRefresh = ts;
-        refreshPassWindows();
-      }
-      if (tleMode === 'live' && (!tick._lastTle || ts - tick._lastTle > 720000)) {
-        tick._lastTle = ts;
-        refreshLiveTleQuiet();
-      }
-      requestAnimationFrame(tick);
     }
+    tick._token = 0;
+    // Vigilante: si por cualquier motivo el bucle se detiene (con la app visible), se reinicia solo
+    setInterval(() => {
+      if (!window.__tickStarted || document.hidden) return;
+      if (Date.now() - (tick._at || 0) > 3500) {
+        tick._token++;
+        const tk = tick._token;
+        requestAnimationFrame(t => tick(t, tk));
+      }
+    }, 3000);
 
     function setDetection(on) {
       detectionOn = on;
