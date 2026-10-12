@@ -1093,7 +1093,7 @@
       <div class="box" style="border-color:rgba(255,214,0,0.4)">
         <strong style="color:#ffd600">🔔 Alerta Misiones</strong><br/>
         Con la campana activada, la app avisa <strong>6 minutos antes</strong> de que un satélite pase por
-        Misiones (solo el territorio de la provincia, sin margen).
+        Misiones o sus zonas limítrofes (margen ~150 km).
         <button class="close-btn" id="btnTestAlert" type="button" style="margin-top:8px">PROBAR NOTIFICACIÓN</button>
         <button class="close-btn" id="btnTestBg" type="button" style="margin-top:8px">PRUEBA EN SEGUNDO PLANO (60 s)</button>
       </div>
@@ -2261,7 +2261,7 @@
     // =====================================================================
     const MIS_ALERT = {
       leadMin: 6,        // minutos de anticipación
-      bufferKm: 0,       // 0 = solo el territorio de Misiones, sin margen
+      bufferKm: 150,     // margen alrededor de Misiones (zonas limítrofes: Corrientes, Paraguay, Brasil)
       cooldownMin: 25,   // no repetir aviso del mismo satélite durante este tiempo
       checkSec: 10,      // cada cuántos segundos se revisa
       stepSec: 5,        // resolución de la predicción (5 s ≈ 37 km: no se escapa ningún cruce)
@@ -2273,10 +2273,11 @@
     };
     // Contorno aproximado de la provincia de Misiones [lon, lat]
     const MIS_POLY = [
-      [-54.60,-25.60],[-54.30,-25.62],[-54.00,-25.68],[-53.80,-25.90],[-53.65,-26.10],[-53.75,-26.40],
-      [-53.98,-26.85],[-54.20,-27.15],[-54.55,-27.45],[-54.92,-27.70],[-55.13,-27.87],[-55.55,-28.00],
-      [-55.75,-28.15],[-55.95,-27.65],[-55.92,-27.40],[-55.50,-27.12],[-55.02,-26.80],[-54.65,-26.40],
-      [-54.58,-25.97]
+      [-54.60,-25.60],[-54.43,-25.68],[-54.15,-25.62],[-53.85,-25.70],[-53.78,-25.92],[-53.68,-26.08],
+      [-53.64,-26.25],[-53.72,-26.50],[-53.80,-26.75],[-53.85,-27.00],[-53.93,-27.15],[-54.20,-27.30],
+      [-54.45,-27.40],[-54.70,-27.50],[-54.90,-27.65],[-55.13,-27.87],[-55.45,-28.00],[-55.70,-28.17],
+      [-55.95,-27.90],[-56.06,-27.60],[-56.03,-27.45],[-55.88,-27.36],[-55.60,-27.32],[-55.40,-27.20],
+      [-55.20,-27.00],[-54.98,-26.78],[-54.75,-26.55],[-54.62,-26.40],[-54.60,-26.10],[-54.57,-25.95]
     ];
     function misDistKm(lat, lon) {
       if (Math.abs(lat + 26.9) > 5 || Math.abs(lon + 55) > 7) return Infinity;   // descarte rápido

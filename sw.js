@@ -1,5 +1,5 @@
 /* Centinela UFO — Service Worker: app shell offline */
-const CACHE = 'centinela-v28-prioridad-misiones';
+const CACHE = 'centinela-v29-misiones-margen';
 const APP_SHELL = [
   './',
   './index.html',
