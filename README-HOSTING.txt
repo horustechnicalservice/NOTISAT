@@ -88,3 +88,42 @@ NOTA v30 (satelites "trabados"):
   valida se oculta en vez de quedar congelado, y no se dibujan duplicados.
 - Prioridad Misiones acotada: MIS_ALERT.maxPriority = 24 (los que cruzan antes), mas los ~55 normales. Los que
   terminaron su paso se quitan solos. Se quito la sombra amarilla (pesada); queda el nombre en amarillo.
+
+NOTA v31 (segundo plano):
+- Con la app cerrada solo funciona si la app ANDROID tiene el modulo nativo (ver android-nativo.zip / LEEME.txt).
+  En navegador o PWA no es posible: Android congela la pagina en segundo plano.
+- Horizonte de alarmas nativas: 24 h (MIS_ALERT.horizonH), hasta 300 avisos.
+- SOBRE > "DIAGNOSTICO + PRUEBA EN SEGUNDO PLANO" muestra por que (no) llegan: si hay modulo nativo, si la campana
+  esta activa, cuantos avisos se programaron y (si la app lo informa) permisos de notificaciones, alarmas exactas
+  y bateria. La pagina llama a window.Android.ensureBackgroundPermissions() y getStatus() si existen.
+
+NOTA v32 (pestaña EN TRÁNSITO):
+- El recuadro flotante "Próximo en tránsito" se quitó de la imagen y ahora es una pestaña desplegable en el borde
+  izquierdo, igual que Tipos e Identificados, ubicada debajo de Identificados. Se abre/cierra al tocarla y solo hay
+  un panel abierto a la vez. Su contenido (#nextPassBody) se sigue actualizando igual que antes.
+
+NOTA v33: el panel EN TRÁNSITO se abre a la altura de su propia pestaña (debajo de Identificados) en vez de arriba,
+para no taparse con el cartel ni con las otras ventanas. Se recalcula al abrir y al girar/redimensionar la pantalla.
+
+NOTA v34: los tres paneles izquierdos (Tipos, Identificados, En tránsito) se abren cada uno a la altura de su propia
+pestaña (alignLeftPanels), por lo que ya no se superponen ni se mezclan. Si el contenido no entra hacia abajo, hace
+scroll dentro del propio panel.
+
+NOTA v35: el bloque superior (CENTINELA UFO, tráfico orbital, scroll de satélites, en línea TLE vivo) sube completo,
+con el mismo orden y separación. Ajuste fino: variable CSS --hdr-top (ahora 4.6%, antes 7.2%).
+
+NOTA v36: se quitó el botón "ENTENDIDO · NO CONFUNDIR CON OVNIS" de la ventana SOBRE (se cierra con la ✕ o tocando fuera);
+esa ventana ahora muestra barra de desplazamiento gruesa y un aviso "DESLIZÁ PARA VER MÁS" al pie. Nuevo botón RECARGAR
+(arriba del radar, sobre SOBRE): busca actualización del service worker, borra cachés y recarga la app.
+
+NOTA v37: la franja dice "● TRÁFICO ORBITAL · SGP4 · ARGENTINO". El botón RECARGAR queda justo encima de SOBRE
+(bottom: calc(5.8% + 40px) = alto de SOBRE 34 px + 6 px de margen).
+
+NOTA v38 (identificación instantánea al cruzar la línea amarilla):
+- Antes la lista "sobre Argentina" se actualizaba cada 5 s (≈ 39 km de retraso a 7,8 km/s). Ahora el cruce se evalúa en
+  CADA cuadro con el mismo contorno que dibuja la línea amarilla (overAR): retraso ≈ 10 ms. Al entrar se actualiza la
+  lista, el marcador destella en amarillo y se despliega Identificados con todos sus datos (nombre, NORAD, tipo, hora de
+  ingreso, posición, órbita, provincia, ruta).
+- Vigilancia previa (WATCH_BOX ≈ 400 km alrededor de Argentina): todo satélite del catálogo que se acerca se dibuja ANTES
+  de entrar, aunque no entre en el tope de 55; se quita al alejarse.
+- No pisa lo que estás mirando: si ya tenés un satélite seleccionado que sigue sobre Argentina, solo se actualiza la lista.
