@@ -1094,7 +1094,7 @@
         Con la campana activada, la app avisa <strong>6 minutos antes</strong> de que un satélite pase por
         Misiones o sus zonas limítrofes (margen ~150 km).
         <button class="close-btn" id="btnTestAlert" type="button" style="margin-top:8px">PROBAR NOTIFICACIÓN</button>
-        <button class="close-btn" id="btnTestBg" type="button" style="margin-top:8px">DIAGNÓSTICO + PRUEBA EN SEGUNDO PLANO (60 s)</button>
+        <button class="close-btn" id="btnTestBg" type="button" style="margin-top:8px">PRUEBA EN SEGUNDO PLANO (60 s)</button>
       </div>
       <button class="close-btn" id="closeInfo">ENTENDIDO · NO CONFUNDIR CON OVNIS</button>
     </div>
@@ -2316,9 +2316,9 @@
       stepSec: 5,        // resolución de la predicción (5 s ≈ 37 km: no se escapa ningún cruce)
       maxPriority: 24,   // tope de satélites con prioridad de dibujo (los que cruzan antes); evita saturar el teléfono
       priorityMin: 90,   // minutos hacia adelante: todo satélite que cruce Misiones en este lapso se dibuja con prioridad total
-      horizonH: 24,      // horas hacia adelante que se programan como alarmas nativas (Android): cubre aunque no abras la app en todo el día
+      horizonH: 8,       // horas hacia adelante que se programan como alarmas nativas (Android)
       groupSec: 180,     // pasos con alertas a menos de este tiempo se agrupan en UNA notificación
-      maxAlarms: 300,    // máximo de alarmas nativas programadas
+      maxAlarms: 200,    // máximo de alarmas nativas programadas
       excludeTypes: []   // tipos a ignorar, p. ej. ['comms'] para no avisar de Starlink
     };
     // Contorno aproximado de la provincia de Misiones [lon, lat]
@@ -2420,14 +2420,14 @@
       toast: document.getElementById('alertToast'),
       test: document.getElementById('btnTestAlert')
     };
-    function misToast(title, body, ms) {
+    function misToast(title, body) {
       if (!misEls.toast) return;
       misEls.toast.innerHTML = '<b></b><span></span>';
       misEls.toast.firstChild.textContent = title;
       misEls.toast.lastChild.textContent = body;
       misEls.toast.classList.add('show');
       clearTimeout(misToastTimer);
-      misToastTimer = setTimeout(() => misEls.toast.classList.remove('show'), ms || 14000);
+      misToastTimer = setTimeout(() => misEls.toast.classList.remove('show'), 14000);
     }
     // Entrega: 1) puente Android (WebView)  2) Service Worker ya registrado  3) Notification API
     async function misNotify(title, body, tag) {
@@ -2532,7 +2532,6 @@
     // ---------------------------------------------------------------------
     function misNativeReady() { return !!(window.Android && typeof window.Android.scheduleAlerts === 'function'); }
     let misSchedIdx = new Set(), misSchedBusy = false;
-    let misSched = null;   // {t, count, next, error} del último agendado hacia Android
 
     // Busca los ingresos de un satélite a la zona entre start y end (salta tiempo cuando está lejos)
     function misPassesForSat(sat, start, end, out) {
@@ -2559,41 +2558,6 @@
         t += 4000; first = false;
       }
     }
-
-    // Diagnóstico: ¿por qué (no) llegan avisos con la app en segundo plano?
-    function misBgDiag() {
-      const A = window.Android, L = [];
-      const fn = n => !!(A && typeof A[n] === 'function');
-      const hh = t => new Date(t).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-      let ok = false;
-      if (!A) {
-        L.push('✗ Estás en el navegador / PWA, no en la app Android.');
-        L.push('Sin la app nativa NO se puede avisar con la app cerrada: el navegador congela la página en segundo plano.');
-      } else if (!fn('scheduleAlerts')) {
-        L.push('✗ La app Android NO tiene el módulo de alarmas (scheduleAlerts).');
-        L.push('Por eso solo avisa con la app abierta. Hay que instalar la versión nueva de la app (carpeta android-nativo).');
-      } else {
-        ok = true;
-        L.push('✓ App Android con módulo de alarmas.');
-        if (!misEnabled) L.push('✗ La campana está apagada: activala (verde).');
-        if (misSched && misSched.error) L.push('✗ Error al programar: ' + misSched.error);
-        else if (misSched) L.push('✓ ' + misSched.count + ' aviso(s) programado(s) para las próximas ' + MIS_ALERT.horizonH + ' h' + (misSched.next ? ' · el primero a las ' + hh(misSched.next) : '') + '.');
-        else L.push('… Todavía no se programó nada (esperá ~1 min con la campana activa).');
-        try {
-          if (fn('getStatus')) {
-            const st = JSON.parse(A.getStatus());
-            if (st.notifications === false) L.push('✗ Permiso de notificaciones DENEGADO (Ajustes > Apps > Centinela > Notificaciones).');
-            if (st.exactAlarms === false) L.push('✗ Falta permiso de ALARMAS EXACTAS (Ajustes > Apps > Acceso especial > Alarmas y recordatorios).');
-            if (st.batteryUnrestricted === false) L.push('✗ Batería "optimizada": Android puede retrasar o matar los avisos. Poné Centinela en "Sin restricciones".');
-            if (st.scheduled != null) L.push('Alarmas activas en Android: ' + st.scheduled);
-          } else {
-            L.push('(La app no informa permisos: revisá notificaciones, alarmas exactas y batería "sin restricciones".)');
-          }
-        } catch (e) {}
-      }
-      return { ok: ok, text: L.join('\n') };
-    }
-
     async function misScheduleNative() {
       if (!misEnabled || !misNativeReady() || misSchedBusy) return;
       const src = misSource();
@@ -2632,10 +2596,7 @@
         }
         window.Android.scheduleAlerts(JSON.stringify(payload));
         misSchedIdx = idx;
-        misSched = { t: Date.now(), count: payload.length, next: payload.length ? payload[0].at : null, error: null };
-      } catch (e) {
-        misSched = { t: Date.now(), count: 0, next: null, error: String((e && e.message) || e) };
-      } finally { misSchedBusy = false; }
+      } catch (e) { /* ignorar */ } finally { misSchedBusy = false; }
     }
 
     async function misSetEnabled(on, silent) {
@@ -2650,7 +2611,6 @@
       }
       setTimeout(misScheduleNative, 3000);
       try { if (window.Android && typeof window.Android.requestNotificationPermission === 'function') window.Android.requestNotificationPermission(); } catch (e) {}
-      try { if (window.Android && typeof window.Android.ensureBackgroundPermissions === 'function') window.Android.ensureBackgroundPermissions(); } catch (e) {}
       let perm = 'default';
       try { if ('Notification' in window) { perm = Notification.permission; if (perm === 'default') perm = await Notification.requestPermission(); } } catch (e) {}
       const hasBridge = !!(window.Android && typeof window.Android.showNotification === 'function');
@@ -2668,16 +2628,13 @@
       else setTimeout(() => misToast('Estado de la alerta', misStatusText()), 4500);
     });
     const btnTestBg = document.getElementById('btnTestBg');
-    if (btnTestBg) btnTestBg.addEventListener('click', async () => {
-      if (!misEnabled) await misSetEnabled(true, true);
-      try { if (misNativeReady()) await misScheduleNative(); } catch (e) {}
-      const d = misBgDiag();
-      let extra = '';
+    if (btnTestBg) btnTestBg.addEventListener('click', () => {
       if (window.Android && typeof window.Android.scheduleTestAlert === 'function') {
         window.Android.scheduleTestAlert(60);
-        extra = '\n\nPrueba enviada: minimizá la app y apagá la pantalla; en 60 s debe sonar una notificación.';
+        misToast('Prueba programada', 'Minimizá la app y apagá la pantalla: en 60 segundos debe llegar una notificación del teléfono.');
+      } else {
+        misToast('Falta actualizar la app Android', 'Esta app no tiene todavía el módulo de alarmas nativas (scheduleTestAlert).');
       }
-      misToast(d.ok ? 'Segundo plano · diagnóstico' : 'Segundo plano · NO disponible', d.text + extra, 30000);
     });
     try { if (localStorage.getItem('misAlertOn') === '1') misSetEnabled(true, true); } catch (e) {}
     setInterval(misCheck, 2000);
