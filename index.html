@@ -1163,7 +1163,7 @@
       <p style="font-size:0.62rem;text-align:right;color:#8ad4f0;margin-top:8px">Desarrollado por: <strong style="color:#e0f4ff">Aldo Ríos</strong>. (Centinela UFO Argentina)</p>
       <div class="box" style="border-color:rgba(255,214,0,0.4)">
         <strong style="color:#ffd600">🔔 Alerta Misiones</strong><br/>
-        Con la campana activada, la app avisa <strong>6 minutos antes</strong> de que un satélite pase por
+        Con la campana activada, la app avisa <strong>3 minutos antes</strong> de que un satélite pase por
         Misiones o sus zonas limítrofes (margen ~150 km).
         <button class="close-btn" id="btnTestAlert" type="button" style="margin-top:8px">PROBAR NOTIFICACIÓN</button>
         <button class="close-btn" id="btnTestBg" type="button" style="margin-top:8px">DIAGNÓSTICO + PRUEBA EN SEGUNDO PLANO (60 s)</button>
@@ -2031,10 +2031,42 @@
       }
       return seg.length >= 2 ? splitVisible(seg) : [];
     }
-    // Garantiza que el satélite tenga SU línea en el mapa, con datos actuales (la recrea si faltaba)
+    // La línea de órbita SOLO se dibuja desde MIS_ALERT.leadMin minutos antes de tocar el territorio argentino
+    // y mientras el satélite está sobre él. Fuera de ese lapso no se dibuja (el marcador sí se sigue mostrando).
+    // Mismo valor que el aviso de notificación: MIS_ALERT.leadMin (3 min = 180 s). Se lee en el momento de usarlo.
+    function orbitLeadSec() { return MIS_ALERT.leadMin * 60; }
+    // Distancia aproximada (km) a la caja gruesa de Argentina (la misma que usa overAR); 0 si está dentro
+    function lineBoxDistKm(lat, lon) {
+      const S = -55.2, N = -21.7, W = -73.7, E = -53.5;
+      const dLat = Math.max(0, S - lat, lat - N);
+      const dLon = Math.max(0, W - lon, lon - E);
+      const cl = Math.cos(Math.max(S, Math.min(N, lat)) * Math.PI / 180);
+      return Math.hypot(dLat * 110.57, dLon * 111.32 * cl);
+    }
+    function orbitLineActive(sat, centerMs) {
+      const c = sat._lineChk;
+      if (c && Math.abs(centerMs - c.t) < 2000) return c.v;       // cache: no recalcula en cada cuadro
+      let v = false;
+      try {
+        const p0 = getPos(sat.satrec, new Date(centerMs));
+        if (okPos(p0)) {
+          if (overAR(p0.lon, p0.lat)) v = true;
+          else if (lineBoxDistKm(p0.lat, p0.lon) <= orbitLeadSec() * 9) {   // 9 km/s = cota de velocidad terrestre
+            for (let t = 5, L = orbitLeadSec(); t <= L; t += 5) {
+              const p = getPos(sat.satrec, new Date(centerMs + t * 1000));
+              if (okPos(p) && overAR(p.lon, p.lat)) { v = true; break; }
+            }
+          }
+        }
+      } catch (e) { v = false; }
+      sat._lineChk = { t: centerMs, v: v };
+      return v;
+    }
+    // Garantiza que el satélite tenga SU línea en el mapa cuando corresponde (la quita cuando no)
     function ensurePolyline(sat, centerMs, stepMin) {
       if (!map || !sat || !sat.satrec) return;
-      const latlngs = satSegment(sat, centerMs, stepMin || 3);
+      const show = orbitLineActive(sat, centerMs);
+      const latlngs = show ? satSegment(sat, centerMs, stepMin || 3) : [];
       if (!sat.polyline) {
         sat.polyline = L.polyline(latlngs, {
           color: sat.color || TYPE_COLORS[sat.type] || '#29b6f6', weight: 1.5, opacity: 0.55,
@@ -2044,7 +2076,8 @@
       } else {
         sat.polyline.setLatLngs(latlngs);      // [] si no hay tramo visible: nunca queda una línea vieja congelada
       }
-      if (detectionOn && !map.hasLayer(sat.polyline)) sat.polyline.addTo(map);
+      if (show && detectionOn) { if (!map.hasLayer(sat.polyline)) sat.polyline.addTo(map); }
+      else if (map.hasLayer(sat.polyline)) map.removeLayer(sat.polyline);
     }
 
     // Crea marcador + línea de órbita de un satélite
@@ -2172,10 +2205,9 @@
     function updateSatCountLabel(n, useGlobal) {
       const countEl = document.getElementById('satCount');
       if (!countEl) return;
-      const base = useGlobal
-        ? (n + ' en constelación · tráfico orbital conocido')
-        : (n + ' en tránsito hacia la República Argentina');
-      const msg = base + '  ·  click sobre el satélite para más info';
+      const msg = useGlobal
+        ? (n + ' en constelación · tráfico orbital conocido  ·  click sobre el satélite para más info')
+        : (n + ' satélites, en tránsito hacia la República Argentina - Las líneas orbitales se dibujan, tres minutos antes de que los satélites detecten el territorio Argentino.');
       countEl.innerHTML = '<div class="sat-scroll"><span>' + msg + '</span><span>' + msg + '</span></div>';
     }
 
@@ -2567,7 +2599,7 @@
     // Ajustá estos valores si querés cambiar el comportamiento.
     // =====================================================================
     const MIS_ALERT = {
-      leadMin: 6,        // minutos de anticipación
+      leadMin: 3,        // minutos de anticipación (las líneas de órbita usan este MISMO valor: antes de tocar Argentina)
       bufferKm: 150,     // margen alrededor de Misiones (zonas limítrofes: Corrientes, Paraguay, Brasil)
       cooldownMin: 25,   // no repetir aviso del mismo satélite durante este tiempo
       checkSec: 10,      // cada cuántos segundos se revisa
@@ -2921,7 +2953,7 @@
     if (misEls.toast) misEls.toast.addEventListener('click', () => misEls.toast.classList.remove('show'));
     if (misEls.test) misEls.test.addEventListener('click', async () => {
       if (!misEnabled) await misSetEnabled(true, true);
-      const via = await misNotify('🛰️ PRUEBA · Alerta Misiones', 'Así se verá el aviso 6 min antes de un satélite sobre Misiones.', 'mis-test');
+      const via = await misNotify('🛰️ PRUEBA · Alerta Misiones', 'Así se verá el aviso ' + MIS_ALERT.leadMin + ' min antes de un satélite sobre Misiones.', 'mis-test');
       if (via === 'toast') misToast('Prueba (solo dentro de la app)', 'Falta el permiso de notificaciones del sistema.');
       else setTimeout(() => misToast('Estado de la alerta', misStatusText()), 4500);
     });
