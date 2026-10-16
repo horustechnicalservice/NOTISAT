@@ -1029,6 +1029,26 @@
     #alertToast.show { display: block; }
     #alertToast span { white-space: pre-line; }
     #alertToast b { display: block; color: #ffd600; font-size: 0.74rem; margin-bottom: 2px; }
+
+    /* MI CIELO (visibilidad desde mi ubicación) */
+    #btnSky { position: absolute; bottom: 5.8%; right: calc(2.2% + 136px); width: 34px; height: 34px; border-radius: 50%;
+      background: rgba(4,18,30,0.92); border: 1.5px solid #ffd600; color: #ffd600; font-size: 1rem; display: flex; align-items: center;
+      justify-content: center; cursor: pointer; z-index: 1200; pointer-events: auto; padding: 0; box-shadow: 0 0 10px rgba(255,214,0,0.45); }
+    #skyModal { position: absolute; inset: 0; background: rgba(0,4,12,0.78); display: none; align-items: center; justify-content: center; z-index: 3100; backdrop-filter: blur(6px); pointer-events: auto; }
+    #skyModal.show { display: flex; }
+    #skyCard { position: relative; width: min(360px, 94vw); max-height: 88vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+      background: linear-gradient(165deg, rgba(0,14,30,0.98), rgba(0,6,16,0.98)); border: 1px solid rgba(255,214,0,0.45); border-radius: 14px;
+      padding: 16px 14px; color: #b0d0e4; font-size: 0.72rem; line-height: 1.5; box-shadow: 0 0 40px rgba(0,100,200,0.25); }
+    #skyCard h2 { font-size: 0.9rem; color: #ffd600; letter-spacing: 1px; text-align: center; }
+    #skyCard .sub { text-align: center; font-size: 0.55rem; color: #4aa8d0; margin-bottom: 8px; }
+    .sk-x { position: absolute; top: 8px; right: 10px; background: none; border: 0; color: #e0f4ff; font-size: 1rem; cursor: pointer; }
+    .sk-box { background: rgba(0,30,55,0.5); border-left: 3px solid #ffd600; border-radius: 6px; padding: 7px 9px; margin: 6px 0; font-size: 0.66rem; }
+    .sk-lbl { margin: 9px 0 3px; font-size: 0.6rem; color: #8ad4f0; letter-spacing: .5px; text-transform: uppercase; }
+    .sk-c, .sk-b { background: rgba(0,50,90,0.7); border: 1px solid rgba(0,160,230,0.4); color: #e0f4ff; border-radius: 14px; padding: 5px 10px; margin: 2px 3px 2px 0; font-size: 0.64rem; cursor: pointer; }
+    .sk-c.on { background: rgba(80,60,0,0.9); border-color: #ffd600; color: #ffe566; }
+    .sk-it { border: 1px solid rgba(0,140,200,0.3); border-radius: 8px; padding: 7px 9px; margin: 6px 0; cursor: pointer; }
+    .sk-it.sel { border-color: #ffd600; background: rgba(60,45,0,0.35); }
+    .sk-s { font-size: 0.6rem; opacity: .85; } .sk-d { margin-top: 6px; font-size: 0.66rem; }
   </style>
 </head>
 <body>
@@ -1121,6 +1141,7 @@
     <button id="btnReload" type="button" title="Recargar / actualizar la app" aria-label="Recargar app"><span class="br-i">&#8635;</span><span class="br-t">RECARGAR</span></button>
     <button id="btnInfo" title="¿Qué estoy viendo?"><span class="bi-q">?</span><span class="bi-t">SOBRE</span></button>
     <button id="btnAlert" type="button" title="Alerta de satélites sobre Misiones" aria-label="Alerta Misiones">&#128276;</button>
+    <button id="btnSky" type="button" title="Satélites visibles desde mi ubicación" aria-label="Mi cielo">&#128205;</button>
     <div id="alertToast" role="status"></div>
 
     <!-- timeline eliminado: zona inferior = en tránsito + estado red -->
@@ -1163,7 +1184,7 @@
       <p style="font-size:0.62rem;text-align:right;color:#8ad4f0;margin-top:8px">Desarrollado por: <strong style="color:#e0f4ff">Aldo Ríos</strong>. (Centinela UFO Argentina)</p>
       <div class="box" style="border-color:rgba(255,214,0,0.4)">
         <strong style="color:#ffd600">🔔 Alerta Misiones</strong><br/>
-        Con la campana activada, la app avisa <strong>3 minutos antes</strong> de que un satélite pase por
+        Con la campana activada, la app avisa <strong>6 minutos antes</strong> de que un satélite pase por
         Misiones o sus zonas limítrofes (margen ~150 km).
         <button class="close-btn" id="btnTestAlert" type="button" style="margin-top:8px">PROBAR NOTIFICACIÓN</button>
         <button class="close-btn" id="btnTestBg" type="button" style="margin-top:8px">DIAGNÓSTICO + PRUEBA EN SEGUNDO PLANO (60 s)</button>
@@ -2033,7 +2054,7 @@
     }
     // La línea de órbita SOLO se dibuja desde MIS_ALERT.leadMin minutos antes de tocar el territorio argentino
     // y mientras el satélite está sobre él. Fuera de ese lapso no se dibuja (el marcador sí se sigue mostrando).
-    // Mismo valor que el aviso de notificación: MIS_ALERT.leadMin (3 min = 180 s). Se lee en el momento de usarlo.
+    // Mismo valor que el aviso de notificación: MIS_ALERT.leadMin (6 min = 360 s). Se lee en el momento de usarlo.
     function orbitLeadSec() { return MIS_ALERT.leadMin * 60; }
     // Distancia aproximada (km) a la caja gruesa de Argentina (la misma que usa overAR); 0 si está dentro
     function lineBoxDistKm(lat, lon) {
@@ -2207,7 +2228,7 @@
       if (!countEl) return;
       const msg = useGlobal
         ? (n + ' en constelación · tráfico orbital conocido  ·  click sobre el satélite para más info')
-        : (n + ' satélites, en tránsito hacia la República Argentina - Las líneas orbitales se dibujan, tres minutos antes de que los satélites detecten el territorio Argentino.');
+        : (n + ' satélites, en tránsito hacia la República Argentina - Las líneas orbitales se dibujan, seis minutos antes de que los satélites detecten el territorio Argentino.');
       countEl.innerHTML = '<div class="sat-scroll"><span>' + msg + '</span><span>' + msg + '</span></div>';
     }
 
@@ -2599,7 +2620,7 @@
     // Ajustá estos valores si querés cambiar el comportamiento.
     // =====================================================================
     const MIS_ALERT = {
-      leadMin: 3,        // minutos de anticipación (las líneas de órbita usan este MISMO valor: antes de tocar Argentina)
+      leadMin: 6,        // minutos de anticipación (las líneas de órbita usan este MISMO valor: antes de tocar Argentina)
       bufferKm: 150,     // margen alrededor de Misiones (zonas limítrofes: Corrientes, Paraguay, Brasil)
       cooldownMin: 25,   // no repetir aviso del mismo satélite durante este tiempo
       checkSec: 10,      // cada cuántos segundos se revisa
@@ -2885,13 +2906,14 @@
     }
 
     async function misScheduleNative() {
-      if (!misEnabled || !misNativeReady() || misSchedBusy) return;
+      const skyOn = (typeof skyAlertOn === 'function') && skyAlertOn();
+      if ((!misEnabled && !skyOn) || !misNativeReady() || misSchedBusy) return;
       const src = misSource();
       if (!src || !src.length) return;
       misSchedBusy = true;
       try {
         const A = MIS_ALERT, now = Date.now(), end = now + A.horizonH * 3600000, events = [];
-        for (let i = 0; i < src.length; i++) {
+        for (let i = 0; i < (misEnabled ? src.length : 0); i++) {
           const sat = src[i];
           if (sat && sat.satrec && !(A.excludeTypes && A.excludeTypes.indexOf(sat.type) >= 0)) misPassesForSat(sat, now, end, events);
           if (i % 40 === 39) await new Promise(r => setTimeout(r, 0));   // no trabar la interfaz
@@ -2920,6 +2942,7 @@
           payload.push({ id: 'mis-' + Math.round(at / 1000), at: Math.round(at), title: '🛰️ Satélite cerca de Misiones', body: body });
           grp.list.forEach(e => idx.add(e.key + '@' + Math.round(e.tIn / 60000)));
         }
+        if (skyOn && typeof skyPayload === 'function') { for (const q of skyPayload(now)) { if (payload.length >= A.maxAlarms) break; payload.push(q); } payload.sort((x, y) => x.at - y.at); }
         window.Android.scheduleAlerts(JSON.stringify(payload));
         misSchedIdx = idx;
         misSched = { t: Date.now(), count: payload.length, next: payload.length ? payload[0].at : null, error: null };
@@ -2933,7 +2956,7 @@
       if (misEls.btn) misEls.btn.classList.toggle('on', on);
       try { localStorage.setItem('misAlertOn', on ? '1' : '0'); } catch (e) {}
       if (!on) {
-        try { if (misNativeReady() && window.Android.cancelAlerts) window.Android.cancelAlerts(); } catch (e) {}
+        try { if (typeof skyAlertOn === 'function' && skyAlertOn()) setTimeout(misScheduleNative, 300); else if (misNativeReady() && window.Android.cancelAlerts) window.Android.cancelAlerts(); } catch (e) {}
         misSchedIdx = new Set();
         if (!silent) misToast('Alerta Misiones desactivada', 'No recibirás avisos de satélites sobre Misiones.');
         return;
@@ -3359,6 +3382,293 @@
         }
       }
     })();
+  </script>
+  <div id="skyModal"><div id="skyCard">
+    <button id="skyX" class="sk-x" type="button" aria-label="Cerrar">&#10005;</button>
+    <h2>👀 MI CIELO</h2><div class="sub">SATÉLITES VISIBLES DESDE TU UBICACIÓN</div>
+    <div id="skyBody"></div>
+  </div></div>
+  <script>
+/* ===== MI CIELO: pasos visibles desde TU ubicación (GPS) ===== */
+(function () {
+  'use strict';
+  const RE = 6378.137, D2R = Math.PI / 180, $ = id => document.getElementById(id);
+  const ld = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
+  const sv = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+  const _sv = ld('skyCfg') || {}, cfg = Object.assign({ minEl: 30, sunMax: -6, magShow: 6, magAlert: 4, lead: 10, hours: 24, alertOn: false, starlink: true, preset: 'a', sort: 'best', v: 2 }, _sv.v === 2 ? _sv : { alertOn: !!_sv.alertOn });
+  const PRE = { a: { minEl: 30, sunMax: -6, magShow: 6, hours: 24 }, n: { minEl: 10, sunMax: -6, magShow: 5 }, m: { minEl: 5, sunMax: -4, magShow: 6.5 }, b: { minEl: 15, sunMax: -9, magShow: 3 } };
+  let obs = ld('skyObs'), events = [], stats = { passes: 0 }, busy = false, again = false, watchId = null, sel = 0, locMsg = '';
+  const notified = {}, sched = new Set();
+
+  const hav = (a, b, c, d) => { const x = Math.sin((c - a) * D2R / 2) ** 2 + Math.cos(a * D2R) * Math.cos(c * D2R) * Math.sin((d - b) * D2R / 2) ** 2; return 12742 * Math.asin(Math.min(1, Math.sqrt(x))); };
+  function sunVec(ms) {
+    const n = ms / 86400000 + 2440587.5 - 2451545.0, L = (280.46 + 0.9856474 * n) % 360, g = ((357.528 + 0.9856003 * n) % 360) * D2R;
+    const lam = (L + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * D2R, ep = (23.439 - 4e-7 * n) * D2R;
+    return [Math.cos(lam), Math.cos(ep) * Math.sin(lam), Math.sin(ep) * Math.sin(lam)];
+  }
+  function sunEl(ms) {
+    const th = satellite.gstime(new Date(ms)) + obs.lon * D2R, c = Math.cos(obs.lat * D2R), s = sunVec(ms);
+    return Math.asin(c * Math.cos(th) * s[0] + c * Math.sin(th) * s[1] + Math.sin(obs.lat * D2R) * s[2]) / D2R;
+  }
+  // Magnitud intrínseca aproximada (a 1000 km, fase 90°). La magnitud final es una ESTIMACIÓN (±1,5).
+  function m0(s) {
+    const n = (s.name || '').toUpperCase();
+    if (/ISS|ZARYA|NAUKA/.test(n)) return -0.5;
+    if (/CSS|TIANHE|WENTIAN|MENGTIAN|TIANZHOU|SHENZHOU/.test(n)) return 0.7;
+    if (/STARLINK/.test(n)) return 5.8;
+    if (s.type === 'station') return 2;
+    if (s.type === 'weather' || s.type === 'eo') return 4.5;
+    if (s.type === 'nav') return 6;
+    return 5.5;
+  }
+  function darkWindows(t0, t1, S) {
+    const w = []; let s = null, t;
+    for (t = t0; t <= t1; t += 120000) {
+      const dk = sunEl(t) <= S.sunMax;
+      if (dk && s === null) s = t;
+      if (!dk && s !== null) { w.push([s, t]); s = null; }
+    }
+    if (s !== null) w.push([s, t1]);
+    return w;
+  }
+  function scanSat(sat, t0, t1, out, S) {
+    const sr = sat.satrec, h = Math.cbrt(398600.4418 / Math.pow(sr.no / 60, 2)) - RE;
+    if (!(h > 150 && h < 6000)) return;
+    const og = { longitude: obs.lon * D2R, latitude: obs.lat * D2R, height: obs.alt || 0 };
+    const oE = satellite.geodeticToEcf(og), oN = Math.hypot(oE.x, oE.y, oE.z);
+    const e0 = S.minEl * D2R, dvis = (Math.acos(RE * Math.cos(e0) / (RE + h)) - e0) * RE;
+    const M0 = m0(sat), cl = Math.cos(og.latitude), sl = Math.sin(og.latitude);
+    let t = t0, cur = null, g = 0;
+    const fin = () => {
+      if (!cur) return;
+      const P = cur.path, V = P.filter(p => p.v); cur = null; S.passes++;
+      if (!V.length) return;
+      let pk = V[0], bs = V[0];
+      V.forEach(p => { if (p.el > pk.el) pk = p; if (p.m < bs.m) bs = p; });
+      if (bs.m > 7) return;
+      out.push({ sat: sat, key: sat.name || 'SAT', type: sat.type, tIn: V[0].t, tOut: V[V.length - 1].t, a: V[0], pk: pk, z: V[V.length - 1], bs: bs, path: P });
+    };
+    while (t < t1 && g++ < 4000) {
+      const d = new Date(t), pv = satellite.propagate(sr, d);
+      if (!pv.position) { t += 60000; continue; }
+      const gm = satellite.gstime(d), e = satellite.eciToEcf(pv.position, gm), rn = Math.hypot(e.x, e.y, e.z);
+      const dist = Math.acos(Math.max(-1, Math.min(1, (e.x * oE.x + e.y * oE.y + e.z * oE.z) / (rn * oN)))) * RE;
+      if (dist > dvis + 40) { fin(); t += Math.max(8000, (dist - dvis - 30) / 8.2 * 1000); continue; }
+      const lk = satellite.ecfToLookAngles(og, e), el = lk.elevation / D2R;
+      if (el < S.minEl) { fin(); t += 5000; continue; }
+      const sv3 = sunVec(t), r = pv.position, dot = r.x * sv3[0] + r.y * sv3[1] + r.z * sv3[2];
+      const lit = !(dot < 0 && Math.sqrt(Math.max(0, r.x * r.x + r.y * r.y + r.z * r.z - dot * dot)) < 6378);   // sombra de la Tierra
+      const th = gm + og.longitude, sE = Math.asin(cl * Math.cos(th) * sv3[0] + cl * Math.sin(th) * sv3[1] + sl * sv3[2]) / D2R;
+      const vis = lit && sE <= S.sunMax;
+      let m = 99;
+      if (vis) {
+        const oi = satellite.ecfToEci(oE, gm), rg = lk.rangeSat;
+        const cb = Math.max(-1, Math.min(1, (sv3[0] * (oi.x - r.x) + sv3[1] * (oi.y - r.y) + sv3[2] * (oi.z - r.z)) / rg)), b = Math.acos(cb);
+        m = M0 + 5 * Math.log10(rg / 1000) - 2.5 * Math.log10(Math.max(1e-3, Math.sin(b) + (Math.PI - b) * cb));
+      }
+      if (!cur) cur = { path: [] };
+      cur.path.push({ t: t, az: (lk.azimuth / D2R + 360) % 360, el: el, v: vis, m: m });
+      t += 5000;
+    }
+    fin();
+  }
+  async function compute() {
+    if (!obs || typeof satellite === 'undefined') return;
+    if (busy) { again = true; return; }
+    busy = true; render();
+    const src = (typeof misSource === 'function') ? misSource() : [], now = Date.now();
+    const S = { minEl: cfg.minEl, sunMax: cfg.sunMax, passes: 0 }, out = [];
+    try {
+      const win = darkWindows(now, now + cfg.hours * 3600000, S);
+      for (let i = 0; i < src.length; i++) {
+        const s = src[i];
+        if (!s || !s.satrec || (!cfg.starlink && s.type === 'comms')) continue;
+        for (const w of win) { try { scanSat(s, w[0], w[1], out, S); } catch (e) {} }
+        if (i % 10 === 9) await new Promise(r => setTimeout(r, 0));
+      }
+      events = out.sort((a, b) => a.tIn - b.tIn); stats = { passes: S.passes, n: src.length, win: win.length };
+    } catch (e) { locMsg = 'Error de cálculo: ' + ((e && e.message) || e); }
+    busy = false; render(); pinBest();
+    try { if (typeof misScheduleNative === 'function') setTimeout(misScheduleNative, 500); } catch (e) {}
+    if (again) { again = false; compute(); }
+  }
+
+  /* ---------- textos ---------- */
+  const hh = t => new Date(t).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  const dir = az => azToDir(az);
+  const mg = m => m <= -1 ? 'muy brillante' : m <= 1 ? 'brillante' : m <= 3 ? 'fácil' : m <= 4.5 ? 'visible' : 'tenue (cielo oscuro)';
+  const cd = ms => { const s = Math.max(0, Math.round(ms / 1000)); return s >= 3600 ? Math.floor(s / 3600) + ' h ' + Math.floor(s % 3600 / 60) + ' min' : Math.floor(s / 60) + ' min ' + (s % 60) + ' s'; };
+  const where = p => dir(p.az) + ' (' + Math.round(p.az) + '°) a ' + Math.round(p.el) + '° ≈ ' + Math.max(1, Math.round(p.el / 10)) + ' puño(s)';
+  const body = e => e.key + ' · se ve desde las ' + hh(e.tIn) + ' · mirá al ' + dir(e.a.az) + ' (' + Math.round(e.a.az) + '°), ' + Math.round(e.a.el) + '° de altura · máx. ' + Math.round(e.pk.el) + '° al ' + dir(e.pk.az) + ' · termina al ' + dir(e.z.az) + ' · ' + Math.round((e.tOut - e.tIn) / 1000) + ' s · brillo ≈ mag ' + e.bs.m.toFixed(1);
+  const TITLE = '👀 Satélite visible desde tu ubicación';
+  const shown = () => events.filter(e => e.bs.m <= cfg.magShow && e.tOut > Date.now());
+  const score = e => e.pk.el + (5 - e.bs.m) * 5 - Math.max(0, (e.tIn - Date.now()) / 3600000) * 0.8;   // alto + brillante + pronto
+  const ordered = () => { const l = shown(); return cfg.sort === 'best' ? l.sort((a, b) => score(b) - score(a)) : l; };
+  function pinBest() {
+    try {
+      const l = ordered(), b = l[0]; if (!b || typeof misPins === 'undefined' || typeof drawPinned !== 'function') return;
+      const now = Date.now(), k = satKey(b.sat);
+      misPins[k] = Math.max(misPins[k] || 0, b.tOut + 10 * 60000); misAhead[k] = Math.min(150, Math.ceil(Math.max(0, b.tOut - now) / 60000) + 10);
+      if (b.tIn - now < 90 * 60000) drawPinned(b.sat);
+    } catch (e) {}
+  }
+
+  function plot(e) {
+    const R = 70, C = 80, pt = p => { const r = (90 - Math.max(0, p.el)) / 90 * R, a = p.az * D2R; return (C - r * Math.sin(a)).toFixed(1) + ',' + (C - r * Math.cos(a)).toFixed(1); };
+    let s = '<svg viewBox="0 0 160 160" style="width:100%;max-width:250px;display:block;margin:6px auto"><circle cx="80" cy="80" r="70" fill="#02101e" stroke="#2a6a8a"/><circle cx="80" cy="80" r="2" fill="#fff"/><text x="84" y="78" fill="#9be7ff" font-size="6">CENIT</text><text x="82" y="60" fill="#4a8aa8" font-size="6">60°</text><text x="82" y="37" fill="#4a8aa8" font-size="6">30°</text><circle cx="80" cy="80" r="46.7" fill="none" stroke="#1b4a66"/><circle cx="80" cy="80" r="23.3" fill="none" stroke="#1b4a66"/>' +
+      '<circle cx="80" cy="80" r="' + ((90 - cfg.minEl) / 90 * R) + '" fill="none" stroke="#a55" stroke-dasharray="2 3"/><path d="M80 10V150M10 80H150" stroke="#1b4a66"/>' +
+      '<g fill="#9be7ff" font-size="9" text-anchor="middle"><text x="80" y="9">N</text><text x="80" y="159">S</text><text x="6" y="83">E</text><text x="154" y="83">O</text></g>';
+    let seg = [], vv = null;
+    const flush = () => { if (seg.length > 1) s += '<polyline fill="none" stroke="' + (vv ? '#ffd600' : '#557') + '" stroke-width="' + (vv ? 2.4 : 1.2) + '"' + (vv ? '' : ' stroke-dasharray="3 2"') + ' points="' + seg.join(' ') + '"/>'; };
+    e.path.forEach(p => { if (vv !== null && p.v !== vv) { const l = seg[seg.length - 1]; flush(); seg = [l]; } vv = p.v; seg.push(pt(p)); });
+    flush();
+    const mk = (p, c, t) => { const q = pt(p).split(','); return '<circle cx="' + q[0] + '" cy="' + q[1] + '" r="3.4" fill="' + c + '"/><text x="' + (+q[0] + 5) + '" y="' + (+q[1] - 4) + '" fill="' + c + '" font-size="8">' + t + '</text>'; };
+    s += mk(e.a, '#40e0a0', 'A') + mk(e.pk, '#fff', '▲') + mk(e.z, '#ff6a6a', 'F');
+    const now = Date.now(), cp = e.path.find((p, i) => p.t <= now && (e.path[i + 1] ? e.path[i + 1].t > now : false));
+    if (cp) s += '<circle cx="' + pt(cp).split(',')[0] + '" cy="' + pt(cp).split(',')[1] + '" r="5" fill="none" stroke="#fff" stroke-width="1.5"/>';
+    return s + '</svg>';
+  }
+
+  // Persona de perfil con rayos de inclinación: amarillo = altura mínima elegida, verde = punto más alto del mejor paso
+  function person(best) {
+    const ex = 44, ey = 94, L = 72, mn = cfg.minEl, P = (d, l) => [ex + (l || L) * Math.cos(d * D2R), ey - (l || L) * Math.sin(d * D2R)], f = q => q[0].toFixed(1) + ',' + q[1].toFixed(1);
+    let o = '<svg viewBox="0 0 250 150" style="width:100%;max-width:320px;display:block;margin:8px auto;background:#02101e;border-radius:8px">';
+    const a = P(mn), z = P(90);
+    o += '<path d="M' + ex + ',' + ey + ' L' + f(a) + ' A' + L + ',' + L + ' 0 0 0 ' + f(z) + ' Z" fill="rgba(255,214,0,0.14)"/>';
+    o += '<line x1="4" y1="140" x2="246" y2="140" stroke="#2a6a8a"/><line x1="' + ex + '" y1="' + ey + '" x2="' + (ex + L + 6) + '" y2="' + ey + '" stroke="#557" stroke-dasharray="3 3"/><text x="' + (ex + L + 8) + '" y="' + (ey + 10) + '" fill="#8aa" font-size="7">horizonte 0°</text>';
+    const ray = (d, col, w, lab, bold, lr) => {
+      const u = [Math.cos(d * D2R), -Math.sin(d * D2R)], t = P(d, L - 9), tip = P(d), n = [-u[1], u[0]], lp = d === 90 ? [ex + 5, ey - L + 2] : P(d, lr || L + 8);
+      o += '<line x1="' + ex + '" y1="' + ey + '" x2="' + f(t) + '" stroke="' + col + '" stroke-width="' + w + '"/><polygon fill="' + col + '" points="' + f(tip) + ' ' + f([t[0] + 3.5 * n[0], t[1] + 3.5 * n[1]]) + ' ' + f([t[0] - 3.5 * n[0], t[1] - 3.5 * n[1]]) + '"/>' +
+        '<text x="' + lp[0].toFixed(1) + '" y="' + lp[1].toFixed(1) + '" fill="' + col + '" font-size="' + (bold ? 9 : 7.5) + '"' + (bold ? ' font-weight="700"' : '') + '>' + lab + '</text>';
+    };
+    [10, 20, 30, 45, 60, 90].forEach(d => { if (d !== mn) ray(d, '#2f7fa5', 1, d + '°' + (d === 90 ? ' cenit' : ''), false); });
+    ray(mn, '#ffd600', 2.4, mn + '°', true);
+    if (best && Math.round(best.pk.el) !== mn) ray(Math.max(1, Math.min(90, best.pk.el)), '#7dffc8', 1.8, '▲' + Math.round(best.pk.el) + '°', true, L + 20);
+    o += '<circle cx="' + ex + '" cy="' + ey + '" r="6.5" fill="#9be7ff"/><line x1="' + ex + '" y1="101" x2="' + ex + '" y2="122" stroke="#9be7ff" stroke-width="3"/><line x1="' + ex + '" y1="122" x2="37" y2="140" stroke="#9be7ff" stroke-width="3"/><line x1="' + ex + '" y1="122" x2="51" y2="140" stroke="#9be7ff" stroke-width="3"/><line x1="' + ex + '" y1="106" x2="39" y2="124" stroke="#9be7ff" stroke-width="3"/>';
+    o += '<line x1="' + ex + '" y1="106" x2="' + (ex + 26 * Math.cos(mn * D2R)).toFixed(1) + '" y2="' + (106 - 26 * Math.sin(mn * D2R)).toFixed(1) + '" stroke="#ffd600" stroke-width="3"/>';
+    o += '<g font-size="7" fill="#b0d0e4"><text x="160" y="22" fill="#ffd600" font-weight="700">↑ Parado, mirando al frente</text><text x="160" y="33">y levantando la vista:</text><text x="160" y="47">10° ≈ 1 puño</text><text x="160" y="57">30° ≈ 3 puños</text><text x="160" y="67">60° ≈ 6 puños</text><text x="160" y="77">90° = justo arriba</text>' +
+      '<text x="160" y="114" fill="#ffd600">■ amarillo: zona que se mira</text>' + (best ? '<text x="160" y="124" fill="#7dffc8">▲ verde: punto más alto del mejor paso</text>' : '') + '</g></svg>';
+    return o;
+  }
+
+  function render() {
+    const card = $('skyCard'), bd = $('skyBody');
+    if (!card || !bd || !$('skyModal').classList.contains('show')) return;
+    const top = card.scrollTop, list = ordered(), now = Date.now();
+    if (sel >= list.length) sel = 0;
+    const c = (a, v, l, on) => '<button type="button" class="sk-c' + (on ? ' on' : '') + '" data-a="' + a + '" data-v="' + v + '">' + l + '</button>';
+    let h = '<div class="sk-box">📍 ' + (obs ? obs.lat.toFixed(4) + ', ' + obs.lon.toFixed(4) + (obs.acc ? ' (±' + Math.round(obs.acc) + ' m)' : '') + ' · ' + (obs.src || '') : 'Sin ubicación todavía') +
+      (locMsg ? '<br><i>' + locMsg + '</i>' : '') + '<br>' + c('gps', 1, 'ACTUALIZAR GPS', false) + (obs ? '' : c('posadas', 1, 'USAR POSADAS (aprox.)', false)) + '</div>';
+    h += '<div class="sk-lbl">Alcance</div>' + c('pre', 'a', '⬆ Mirando hacia arriba', cfg.preset === 'a') + c('pre', 'n', 'Normal', cfg.preset === 'n') + c('pre', 'm', 'Máximo alcance', cfg.preset === 'm') + c('pre', 'b', 'Solo brillantes', cfg.preset === 'b');
+    h += '<div class="sk-lbl">Altura mínima sobre el horizonte (cuánto levantar la vista)</div>' + [10, 20, 30, 45, 60].map(v => c('minel', v, v + '°', cfg.minEl === v)).join('') + person(list[0]) + '<div class="sk-lbl">Orden</div>' + c('sort', 'best', '⭐ Mejor visibilidad', cfg.sort === 'best') + c('sort', 'time', '⏱ Por hora', cfg.sort === 'time');
+    h += '<div class="sk-lbl">Buscar en las próximas</div>' + c('hrs', 12, '12 h', cfg.hours === 12) + c('hrs', 24, '24 h', cfg.hours === 24) + c('star', 1, cfg.starlink ? 'Starlink: SÍ' : 'Starlink: NO', cfg.starlink);
+    h += '<div class="sk-lbl">Avisarme antes de que se vea</div>' + [5, 10, 15, 20].map(v => c('lead', v, v + ' min', cfg.lead === v)).join('');
+    h += '<div class="sk-lbl">Avisar si brillo ≤</div>' + c('mag', 2, '2 (muy brillantes)', cfg.magAlert === 2) + c('mag', 4, '4 (fáciles)', cfg.magAlert === 4) + c('mag', 5.5, '5,5 (todos)', cfg.magAlert === 5.5);
+    h += '<div style="margin-top:8px">' + c('alert', 1, cfg.alertOn ? '🔔 AVISOS ACTIVADOS' : '🔕 ACTIVAR AVISOS DESDE MI UBICACIÓN', cfg.alertOn) + '</div>';
+    h += '<div class="sk-lbl">' + (busy ? '⏳ Calculando…' : list.length + ' paso(s) visible(s) · ' + (stats.passes || 0) + ' pasos sobre tu horizonte en cielo oscuro') + '</div>';
+    if (!busy && !list.length) h += '<div class="sk-box">No hay pasos visibles con estos parámetros. Probá <b>Máximo alcance</b> o <b>24 h</b>. Los satélites solo se ven al anochecer/amanecer, cuando vos estás a oscuras y ellos todavía reciben sol.</div>';
+    if (list.length && cfg.sort === 'best') {
+      const b = list[0], live = b.tIn <= now, cp = live ? b.path.find((p, i) => p.t <= now && b.path[i + 1] && b.path[i + 1].t > now) : null;
+      h += '<div class="sk-box" style="border-left-color:#7dffc8;background:rgba(0,50,40,0.45)"><b style="color:#7dffc8">⭐ MEJOR PASO PARA MIRAR HACIA ARRIBA</b><br><b>' + b.key + '</b> · ' + (live ? '¡AHORA!' : 'en ' + cd(b.tIn - now) + ' (' + hh(b.tIn) + ')') +
+        '<br>Pasa a solo <b>' + Math.round(90 - b.pk.el) + '° del cenit</b> (máx. ' + Math.round(b.pk.el) + '° ≈ ' + Math.max(1, Math.round(b.pk.el / 10)) + ' puños al ' + dir(b.pk.az) + '). Brillo ≈ mag ' + b.bs.m.toFixed(1) + ' (' + mg(b.bs.m) + '), se ve ' + Math.round((b.tOut - b.tIn) / 1000) + ' s.' +
+        (cp ? '<br>👉 <b>Ahora mirá al ' + dir(cp.az) + ' a ' + Math.round(cp.el) + '°</b>' : '<br>Empezá mirando al <b>' + dir(b.a.az) + '</b> a ' + Math.round(b.a.el) + '° y seguilo hacia el <b>' + dir(b.z.az) + '</b>.') + plot(b) + '<div class="sk-s">También está dibujado en el mapa con su órbita.</div></div>';
+    }
+    list.slice(0, 15).forEach((e, i) => {
+      const on = i === sel, live = e.tIn <= now;
+      h += '<div class="sk-it' + (on ? ' sel' : '') + '" data-a="sel" data-v="' + i + '"><b>' + e.key + '</b> · ' + (live ? '<span style="color:#7dffc8">¡AHORA!</span>' : 'en ' + cd(e.tIn - now) + ' (' + hh(e.tIn) + ')') +
+        '<br><span class="sk-s">' + dir(e.a.az) + ' → ' + dir(e.z.az) + ' · máx. ' + Math.round(e.pk.el) + '° · ' + Math.round((e.tOut - e.tIn) / 1000) + ' s · mag ≈ ' + e.bs.m.toFixed(1) + ' (' + mg(e.bs.m) + ')</span>';
+      if (on) {
+        h += '<div class="sk-d">① <b>' + (e.a === e.path[0] ? 'Sale sobre tu horizonte' : 'Se enciende (sale de la sombra)') + '</b>: mirá al ' + where(e.a) +
+          '<br>② <b>Punto más alto</b>: ' + where(e.pk) + '<br>③ <b>' + (e.z === e.path[e.path.length - 1] ? 'Se pierde bajo el horizonte' : 'Se apaga (entra en sombra)') + '</b>: ' + where(e.z) +
+          '<br>Salí ~' + cfg.lead + ' min antes, a oscuras, y mirá al <b>' + dir(e.a.az) + '</b>. Brillo ≈ mag ' + e.bs.m.toFixed(1) + ' (±1,5) en su mejor punto.' + ((cfg.sort === 'best' && i === 0) ? '' : plot(e)) +
+          '<div class="sk-s">Como si miraras hacia arriba (E a la izquierda). A=aparece · ▲=más alto · F=fin · amarillo=visible · gris=en sombra · círculo punteado=tu horizonte mínimo (' + cfg.minEl + '°).</div></div>';
+      }
+      h += '</div>';
+    });
+    h += '<div class="sk-box" style="margin-top:10px">💡 <b>Cómo verlo</b>: puño con el brazo extendido ≈ 10°. Es un punto de luz que cruza sin parpadear y sin luces de colores (un avión parpadea). Dejá 5-10 min que los ojos se adapten y evitá la pantalla. Si hay árboles/edificios al horizonte, usá un horizonte mínimo mayor ("Solo brillantes" usa 15°).</div>';
+    bd.innerHTML = h; card.scrollTop = top;
+  }
+
+  /* ---------- ubicación ---------- */
+  function setObs(lat, lon, alt, acc, src) {
+    if (!isFinite(lat) || !isFinite(lon)) return;
+    const moved = !obs || hav(obs.lat, obs.lon, lat, lon) > 3;
+    obs = { lat: lat, lon: lon, alt: (alt && isFinite(alt)) ? alt : 0, acc: acc || null, t: Date.now(), src: src };
+    locMsg = ''; sv('skyObs', obs);
+    if (moved || !events.length) compute(); else render();
+  }
+  function nativeLoc() {
+    try { if (window.Android && typeof Android.getLocation === 'function') { const j = Android.getLocation(); if (j) { const o = JSON.parse(j); setObs(o.lat, o.lon, o.alt, o.acc, 'GPS Android'); } } } catch (e) {}
+  }
+  window.__onNativeLocation = j => { try { const o = typeof j === 'string' ? JSON.parse(j) : j; setObs(o.lat, o.lon, o.alt, o.acc, 'GPS Android'); } catch (e) {} };
+  function locate() {
+    try { if (window.Android && typeof Android.requestLocationPermission === 'function') Android.requestLocationPermission(); } catch (e) {}
+    nativeLoc();
+    if (!navigator.geolocation) { locMsg = 'Este navegador no tiene GPS.'; render(); return; }
+    const ok = p => setObs(p.coords.latitude, p.coords.longitude, (p.coords.altitude || 0) / 1000, p.coords.accuracy, 'GPS');
+    navigator.geolocation.getCurrentPosition(ok, er => {
+      locMsg = er.code === 1 ? 'Permiso de ubicación DENEGADO: activalo en Ajustes > Apps > Centinela > Permisos > Ubicación.' : er.code === 3 ? 'El GPS tardó demasiado: salí a cielo abierto y reintentá.' : 'GPS no disponible: activá la ubicación del teléfono.';
+      render();
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 });
+    if (watchId == null) try { watchId = navigator.geolocation.watchPosition(ok, () => {}, { enableHighAccuracy: false, maximumAge: 120000, timeout: 60000 }); } catch (e) {}
+  }
+
+  /* ---------- avisos ---------- */
+  window.skyAlertOn = () => !!(cfg.alertOn && obs);
+  window.skyPayload = function (now) {
+    const out = []; sched.clear();
+    events.forEach(e => {
+      if (e.bs.m > cfg.magAlert) return;
+      const at = e.tIn - cfg.lead * 60000; if (at <= now + 5000) return;
+      out.push({ id: 'sky-' + Math.round(at / 1000), at: Math.round(at), title: TITLE, body: 'En ~' + cfg.lead + ' min · ' + body(e) });
+      sched.add(e.key + '@' + Math.round(e.tIn / 60000));
+    });
+    return out;
+  };
+  setInterval(() => {
+    if (!cfg.alertOn || !events.length) return;
+    const now = Date.now();
+    for (const e of events) {
+      const k = e.key + '@' + Math.round(e.tIn / 60000);
+      if (notified[k] || e.tOut < now || e.bs.m > cfg.magAlert || e.tIn - cfg.lead * 60000 > now) continue;
+      notified[k] = 1;
+      const b = (e.tIn > now ? 'En ~' + Math.max(1, Math.round((e.tIn - now) / 60000)) + ' min · ' : '¡Ahora! · ') + body(e);
+      if (sched.has(k) && typeof misToast === 'function') misToast(TITLE, b, 25000); else if (typeof misNotify === 'function') misNotify(TITLE, b, 'sky-' + k);
+    }
+  }, 5000);
+  async function perms() {
+    try { if (window.Android && Android.requestNotificationPermission) Android.requestNotificationPermission(); } catch (e) {}
+    try { if (window.Android && Android.ensureBackgroundPermissions) Android.ensureBackgroundPermissions(); } catch (e) {}
+    try { if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission(); } catch (e) {}
+  }
+  const resched = () => { try { if (typeof misScheduleNative === 'function') setTimeout(misScheduleNative, 400); } catch (e) {} };
+
+  /* ---------- interfaz ---------- */
+  const close = () => $('skyModal').classList.remove('show');
+  $('btnSky').addEventListener('click', () => { $('skyModal').classList.add('show'); render(); if (!obs || Date.now() - obs.t > 600000) locate(); else if (!events.length && !busy) compute(); });
+  $('skyX').addEventListener('click', close);
+  $('skyModal').addEventListener('click', e => { if (e.target === $('skyModal')) close(); });
+  $('skyCard').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-a]'); if (!b) return;
+    const a = b.dataset.a, v = +b.dataset.v;
+    if (a === 'gps') locate();
+    else if (a === 'posadas') setObs(-27.3671, -55.8969, 0.1, null, 'aprox. Posadas');
+    else if (a === 'pre') { Object.assign(cfg, PRE[b.dataset.v], { preset: b.dataset.v }); if (!PRE[b.dataset.v].hours) cfg.hours = 12; sv('skyCfg', cfg); compute(); }
+    else if (a === 'minel') { cfg.minEl = v; cfg.preset = ''; sv('skyCfg', cfg); compute(); }
+    else if (a === 'sort') { cfg.sort = b.dataset.v; sv('skyCfg', cfg); }
+    else if (a === 'hrs') { cfg.hours = v; sv('skyCfg', cfg); compute(); }
+    else if (a === 'star') { cfg.starlink = !cfg.starlink; sv('skyCfg', cfg); compute(); }
+    else if (a === 'lead') { cfg.lead = v; sv('skyCfg', cfg); resched(); }
+    else if (a === 'mag') { cfg.magAlert = v; sv('skyCfg', cfg); resched(); }
+    else if (a === 'alert') { cfg.alertOn = !cfg.alertOn; sv('skyCfg', cfg); if (cfg.alertOn) { perms(); if (!obs) locate(); } resched(); }
+    else if (a === 'sel') { sel = v; }
+    render();
+  });
+  setInterval(() => { render(); if (obs && events.length) pinBest(); }, 5000);
+  setInterval(() => { if (obs) compute(); }, 15 * 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && obs) { if (cfg.alertOn) locate(); compute(); } });
+  setTimeout(() => { if (obs) compute(); if (cfg.alertOn) locate(); }, 15000);
+})();
   </script>
   <div id="buildTag" style="position:fixed;left:6px;bottom:3px;z-index:3000;font:700 9px/1 monospace;color:#7dffc8;opacity:.75;pointer-events:none;text-shadow:0 0 3px #000">BUILD 42 · marcadores centrados</div>
 </body>
