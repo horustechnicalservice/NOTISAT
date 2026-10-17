@@ -1034,6 +1034,29 @@
     #btnSky { position: absolute; bottom: 5.8%; right: calc(2.2% + 136px); width: 34px; height: 34px; border-radius: 50%;
       background: rgba(4,18,30,0.92); border: 1.5px solid #ffd600; color: #ffd600; font-size: 1rem; display: flex; align-items: center;
       justify-content: center; cursor: pointer; z-index: 1200; pointer-events: auto; padding: 0; box-shadow: 0 0 10px rgba(255,214,0,0.45); }
+    #btnRadar { position: absolute; bottom: 5.8%; right: calc(2.2% + 176px); width: 34px; height: 34px; border-radius: 50%;
+      background: rgba(4,18,30,0.92); border: 1.5px solid #39ff88; color: #39ff88; font-size: 1rem; display: flex; align-items: center;
+      justify-content: center; cursor: pointer; z-index: 1200; pointer-events: auto; padding: 0; box-shadow: 0 0 10px rgba(57,255,136,0.45); }
+    #radarModal { position: absolute; inset: 0; background: rgba(0,4,12,0.86); display: none; align-items: center; justify-content: center; z-index: 3150; backdrop-filter: blur(6px); pointer-events: auto; }
+    #radarModal.show { display: flex; }
+    #radarCard { position: relative; width: min(360px, 96vw); max-height: 94vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+      background: linear-gradient(165deg, rgba(0,14,30,0.98), rgba(0,6,16,0.98)); border: 1px solid rgba(57,255,136,0.5); border-radius: 14px;
+      padding: 14px 12px; color: #b0d0e4; font-size: 0.72rem; line-height: 1.45; box-shadow: 0 0 40px rgba(0,200,120,0.2); }
+    #radarCard h2 { font-size: 0.9rem; color: #39ff88; letter-spacing: 1px; text-align: center; margin: 0; }
+    #radarCard .sub { text-align: center; font-size: 0.55rem; color: #4aa8d0; margin-bottom: 6px; }
+    #rdCanvas { width: 100%; aspect-ratio: 1 / 1; display: block; margin: 4px auto; max-width: 340px; }
+    #rdBig { text-align: center; font-weight: 800; font-size: 0.95rem; letter-spacing: 0.5px; padding: 6px 4px; border-radius: 8px; margin: 2px 0 6px; background: rgba(255,214,0,0.12); color: #ffd600; border: 1px solid rgba(255,214,0,0.5); }
+    #rdBig.ok { background: rgba(57,255,136,0.18); color: #39ff88; border-color: #39ff88; box-shadow: 0 0 14px rgba(57,255,136,0.5); }
+    #rdBig.no { background: rgba(255,90,90,0.12); color: #ff8a8a; border-color: rgba(255,90,90,0.5); }
+    .rd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; background: rgba(0,30,55,0.5); border-radius: 8px; padding: 7px 9px; font-size: 0.68rem; }
+    .rd-grid b { color: #e8fbff; }
+    .rd-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+    .rd-b { flex: 1 1 auto; min-width: 46%; background: rgba(0,40,70,0.8); border: 1px solid #2a6a8a; color: #cfefff; border-radius: 8px; padding: 8px 6px; font-size: 0.66rem; font-weight: 700; cursor: pointer; }
+    .rd-b.on { border-color: #39ff88; color: #39ff88; }
+    .rd-b.sm { min-width: 22%; }
+    #radarCard details { margin-top: 8px; background: rgba(0,30,55,0.5); border-radius: 8px; padding: 6px 9px; }
+    #radarCard summary { cursor: pointer; color: #9be7ff; font-weight: 700; }
+    #rdNote { font-size: 0.62rem; color: #ffd600; min-height: 1em; margin-top: 4px; }
     #skyModal { position: absolute; inset: 0; background: rgba(0,4,12,0.78); display: none; align-items: center; justify-content: center; z-index: 3100; backdrop-filter: blur(6px); pointer-events: auto; }
     #skyModal.show { display: flex; }
     #skyCard { position: relative; width: min(360px, 94vw); max-height: 88vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
@@ -1142,6 +1165,7 @@
     <button id="btnInfo" title="¿Qué estoy viendo?"><span class="bi-q">?</span><span class="bi-t">SOBRE</span></button>
     <button id="btnAlert" type="button" title="Alerta de satélites sobre Misiones" aria-label="Alerta Misiones">&#128276;</button>
     <button id="btnSky" type="button" title="Satélites visibles desde mi ubicación" aria-label="Mi cielo">&#128205;</button>
+    <button id="btnRadar" type="button" title="Radar: sensor de proximidad y apuntamiento" aria-label="Radar satelital">&#128225;</button>
     <div id="alertToast" role="status"></div>
 
     <!-- timeline eliminado: zona inferior = en tránsito + estado red -->
@@ -3670,6 +3694,332 @@
   setTimeout(() => { if (obs) compute(); if (cfg.alertOn) locate(); }, 15000);
 })();
   </script>
-  <div id="buildTag" style="position:fixed;left:6px;bottom:3px;z-index:3000;font:700 9px/1 monospace;color:#7dffc8;opacity:.75;pointer-events:none;text-shadow:0 0 3px #000">BUILD 42 · marcadores centrados</div>
+  <div id="radarModal"><div id="radarCard">
+    <button id="rdX" class="sk-x" type="button" aria-label="Cerrar">&#10005;</button>
+    <h2>📡 RADAR SATELITAL</h2><div class="sub">SENSOR DE PROXIMIDAD + APUNTAMIENTO</div>
+    <canvas id="rdCanvas"></canvas>
+    <div id="rdBig">BUSCANDO SATÉLITE…</div>
+    <div class="rd-grid">
+      <div>🛰 <b id="rdName">—</b></div><div>📏 <b id="rdDist">—</b></div>
+      <div>↗ Elevación: <b id="rdEl">—</b></div><div>🧭 Acimut: <b id="rdAz">—</b></div>
+      <div>📱 Teléfono: <b id="rdHdg">—</b></div><div>🔊 Ritmo: <b id="rdRate">—</b></div>
+    </div>
+    <div id="rdNote"></div>
+    <div class="rd-row">
+      <button class="rd-b" data-a="sound" id="rdSound" type="button">🔊 SONIDO: SÍ</button>
+      <button class="rd-b" data-a="mode" id="rdMode" type="button">🎯 OBJETIVO: AUTO</button>
+      <button class="rd-b" data-a="star" id="rdStar" type="button">STARLINK: SÍ</button>
+      <button class="rd-b" data-a="gps" type="button">📍 ACTUALIZAR GPS</button>
+    </div>
+    <details><summary>🧭 Calibrar brújula</summary>
+      <div class="sub" style="text-align:left;margin-top:4px">Los sensores magnéticos suelen errar unos grados (en Misiones ≈ 10° por declinación). Calibrá con uno de estos métodos:</div>
+      <div class="rd-row">
+        <button class="rd-b" data-a="fix" type="button">FIJAR: estoy apuntando al satélite</button>
+        <button class="rd-b" data-a="sun" type="button">CON EL SOL (teléfono plano, parte de arriba hacia el Sol)</button>
+        <button class="rd-b sm" data-a="cm" type="button">−1°</button>
+        <button class="rd-b sm" data-a="cp" type="button">+1°</button>
+        <button class="rd-b sm" data-a="reset" type="button">RESET</button>
+      </div>
+      <div class="sub" style="text-align:left">Corrección actual: <b id="rdCal">0°</b> · No mires al Sol directamente.</div>
+    </details>
+    <div class="sub" style="margin-top:8px;text-align:left">Más rápido = más cerca. Con el teléfono en vertical (como sacando una foto al cielo) o plano como una brújula. La flecha apunta hacia donde está el satélite; cuando queda arriba, el apuntamiento es correcto.</div>
+  </div></div>
+  <script>
+/* ===== RADAR SATELITAL: beeps de proximidad + brújula con flecha de apuntamiento ===== */
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id), D2R = Math.PI / 180, TOL = 10;
+  const ld = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
+  const sv = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+  const cfg = Object.assign({ sound: true, starlink: true, mode: 'auto', cal: 0 }, ld('radarCfg') || {});
+  const norm360 = x => ((x % 360) + 360) % 360, norm180 = x => norm360(x + 180) - 180;
+  const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSO', 'SO', 'OSO', 'O', 'ONO', 'NO', 'NNO'];
+  const dirOf = az => dirs[Math.round(norm360(az) / 22.5) % 16];
+
+  let isOpen = false, obs = ld('skyObs'), target = null, blips = [], hdg = null, absSeen = false, tilt = null, hasSensor = false, lastOri = 0;
+  let ctx = null, lastBeep = 0, raf = 0, tScan = 0, tStat = 0, watchId = null, wake = null, decl = 0, attached = false, note = '', noteT = 0, selFallback = false;
+
+  /* ---------- ubicación ---------- */
+  function updDecl() {
+    decl = 0;
+    try { if (obs && window.Android && typeof Android.getDeclination === 'function') { const d = Number(Android.getDeclination(obs.lat, obs.lon, 0)); if (isFinite(d)) decl = d; } } catch (e) {}
+  }
+  function setObs(lat, lon, alt, acc, src) {
+    if (!isFinite(lat) || !isFinite(lon)) return;
+    obs = { lat: lat, lon: lon, alt: (alt && isFinite(alt)) ? alt : 0, acc: acc || null, t: Date.now(), src: src };
+    updDecl(); if (isOpen) { scan(); status(); }
+  }
+  const prevNative = window.__onNativeLocation;
+  window.__onNativeLocation = j => {
+    try { if (prevNative) prevNative(j); } catch (e) {}
+    try { const o = typeof j === 'string' ? JSON.parse(j) : j; setObs(o.lat, o.lon, o.alt, o.acc, 'GPS Android'); } catch (e) {}
+  };
+  function locate() {
+    try { if (window.Android && typeof Android.requestLocationPermission === 'function') Android.requestLocationPermission(); } catch (e) {}
+    try { if (window.Android && typeof Android.getLocation === 'function') { const j = Android.getLocation(); if (j) { const o = JSON.parse(j); setObs(o.lat, o.lon, o.alt, o.acc, 'GPS Android'); } } } catch (e) {}
+    if (!navigator.geolocation) return;
+    const ok = p => setObs(p.coords.latitude, p.coords.longitude, (p.coords.altitude || 0) / 1000, p.coords.accuracy, 'GPS');
+    const bad = er => flash(er && er.code === 1 ? 'Permiso de ubicación denegado: activalo en Ajustes > Apps > Centinela > Permisos.' : 'GPS no disponible: activá la ubicación y salí a cielo abierto.');
+    try { navigator.geolocation.getCurrentPosition(ok, bad, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }); } catch (e) {}
+    if (watchId == null) try { watchId = navigator.geolocation.watchPosition(ok, () => {}, { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 }); } catch (e) {}
+  }
+  function flash(m) { note = m; noteT = Date.now(); const n = $('rdNote'); if (n) n.textContent = m; }
+
+  /* ---------- brújula ---------- */
+  function onOri(ev) {
+    if (ev.type === 'deviceorientationabsolute') absSeen = true;
+    else if (absSeen && typeof ev.webkitCompassHeading !== 'number') return;
+    let h = null;
+    const hasAng = ev.alpha != null && ev.beta != null && ev.gamma != null;
+    let m12, m22, m13, m23, m33;
+    if (hasAng) {
+      const a = ev.alpha * D2R, b = ev.beta * D2R, g = ev.gamma * D2R, ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b), cg = Math.cos(g), sg = Math.sin(g);
+      m12 = -cb * sa; m22 = ca * cb; m13 = cg * sa * sb + ca * sg; m23 = sa * sg - ca * cg * sb; m33 = cb * cg;
+      tilt = Math.asin(Math.max(-1, Math.min(1, -m33))) / D2R;           // elevación del eje trasero del teléfono
+    }
+    if (typeof ev.webkitCompassHeading === 'number' && isFinite(ev.webkitCompassHeading)) h = ev.webkitCompassHeading;
+    else if (hasAng && (ev.type === 'deviceorientationabsolute' || ev.absolute === true)) {
+      // plano → se usa el borde superior; vertical → se usa la cámara trasera
+      h = Math.hypot(m13, m23) > Math.hypot(m12, m22) ? Math.atan2(-m13, -m23) / D2R : Math.atan2(m12, m22) / D2R;
+    }
+    if (h == null || !isFinite(h)) return;
+    h = norm360(h);
+    hdg = hdg == null ? h : norm360(hdg + 0.3 * norm180(h - hdg));
+    hasSensor = true; lastOri = Date.now();
+  }
+  function attach() {
+    if (attached) return; attached = true;
+    window.addEventListener('deviceorientationabsolute', onOri, true);
+    window.addEventListener('deviceorientation', onOri, true);
+  }
+  function detach() {
+    attached = false;
+    window.removeEventListener('deviceorientationabsolute', onOri, true);
+    window.removeEventListener('deviceorientation', onOri, true);
+  }
+  function startSensors() {
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission().then(r => { if (r === 'granted') attach(); else flash('Permiso de brújula denegado.'); }).catch(() => attach());
+      } else attach();
+    } catch (e) { attach(); }
+  }
+  const H = () => hasSensor && hdg != null ? norm360(hdg + decl + cfg.cal) : 0;
+
+  /* ---------- Sol (para calibrar) ---------- */
+  function sunAzEl() {
+    if (!obs || typeof satellite === 'undefined') return null;
+    const ms = Date.now(), n = ms / 86400000 + 2440587.5 - 2451545.0, L = (280.46 + 0.9856474 * n) % 360, g = ((357.528 + 0.9856003 * n) % 360) * D2R;
+    const lam = (L + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * D2R, ep = (23.439 - 4e-7 * n) * D2R;
+    const s = [Math.cos(lam), Math.cos(ep) * Math.sin(lam), Math.sin(ep) * Math.sin(lam)];
+    const th = satellite.gstime(new Date(ms)) + obs.lon * D2R, la = obs.lat * D2R, c = Math.cos(la), sl = Math.sin(la);
+    const up = c * Math.cos(th) * s[0] + c * Math.sin(th) * s[1] + sl * s[2];
+    const e = -Math.sin(th) * s[0] + Math.cos(th) * s[1];
+    const nn = -sl * Math.cos(th) * s[0] - sl * Math.sin(th) * s[1] + c * s[2];
+    return { el: Math.asin(up) / D2R, az: norm360(Math.atan2(e, nn) / D2R) };
+  }
+
+  /* ---------- objetivo ---------- */
+  function lookOf(s) {
+    try { const l = getLookAngles(s.satrec, new Date(), obs); return (l && isFinite(l.range)) ? l : null; } catch (e) { return null; }
+  }
+  function scan() {
+    if (!obs) return;
+    let src = []; try { src = misSource() || []; } catch (e) {}
+    const all = [];
+    for (let i = 0; i < src.length; i++) {
+      const s = src[i]; if (!s || !s.satrec) continue;
+      if (!cfg.starlink && /STARLINK/i.test(s.name || '')) continue;
+      const l = lookOf(s); if (l) all.push({ sat: s, az: l.az, el: l.el, r: l.range });
+    }
+    blips = all.filter(o => o.el > 0);
+    selFallback = false;
+    let pick = null;
+    if (cfg.mode === 'sel') {
+      let ss = null; try { ss = (typeof selectedSat !== 'undefined') ? selectedSat : null; } catch (e) {}
+      if (ss && ss.satrec) { const l = lookOf(ss); if (l) pick = { sat: ss, az: l.az, el: l.el, r: l.range }; }
+      if (!pick) selFallback = true;
+    }
+    if (!pick) {
+      const pool = blips.length ? blips : all;
+      let best = null; pool.forEach(o => { if (!best || o.r < best.r) best = o; });
+      if (best && target) {
+        const cur = pool.find(o => o.sat === target.sat);
+        if (cur && cur.r <= best.r * 1.15) best = cur;                    // histéresis: no saltar de objetivo por poco
+      }
+      pick = best;
+    }
+    target = pick;
+  }
+  function upd() {
+    if (!target || !obs) return;
+    const l = lookOf(target.sat); if (l) { target.az = l.az; target.el = l.el; target.r = l.range; }
+  }
+  const diffAz = () => target ? norm180(target.az - H()) : 0;
+  const aligned = () => !!target && target.el > 0 && Math.abs(diffAz()) <= TOL;
+
+  /* ---------- sonido ---------- */
+  function interval(r) { const t = Math.min(1, Math.max(0, Math.log(r / 400) / Math.log(10))); return 90 + t * 1910; }   // 400 km → 90 ms · 4000+ km → 2 s
+  function initAudio() {
+    try { const AC = window.AudioContext || window.webkitAudioContext; if (!ctx && AC) ctx = new AC(); if (ctx && ctx.state === 'suspended') ctx.resume(); } catch (e) {}
+  }
+  function beep(freq, dur, vol) {
+    try {
+      if (!ctx) return; const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'triangle'; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + dur + 0.02);
+    } catch (e) {}
+  }
+  setInterval(function () {
+    if (!isOpen || !cfg.sound || !target || document.hidden) return;
+    if (ctx && ctx.state === 'suspended') try { ctx.resume(); } catch (e) {}
+    const now = performance.now(), iv = interval(target.r);
+    if (now - lastBeep >= iv) {
+      lastBeep = now;
+      beep(aligned() ? 1320 : (target.el > 0 ? 880 : 440), Math.min(0.08, iv / 1000 * 0.6), 0.3);
+    }
+  }, 30);
+
+  /* ---------- dibujo ---------- */
+  function draw(t) {
+    const cv = $('rdCanvas'); if (!cv) return; const W = cv.clientWidth; if (!W) return;
+    const dpr = window.devicePixelRatio || 1, px = Math.round(W * dpr);
+    if (cv.width !== px) { cv.width = px; cv.height = px; }
+    const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, W);
+    const cx = W / 2, R = W / 2 - 24, h = H(), ok = aligned();
+    const P = (az, rad) => { const a = (az - h) * D2R; return [cx + rad * Math.sin(a), cx - rad * Math.cos(a)]; };
+    // fondo
+    const bg = c.createRadialGradient(cx, cx, 0, cx, cx, R); bg.addColorStop(0, '#04202a'); bg.addColorStop(1, '#020c16');
+    c.fillStyle = bg; c.beginPath(); c.arc(cx, cx, R, 0, 7); c.fill();
+    // anillos de elevación
+    c.lineWidth = 1; c.strokeStyle = 'rgba(80,200,255,0.25)';
+    [R, R * 2 / 3, R / 3].forEach(r => { c.beginPath(); c.arc(cx, cx, r, 0, 7); c.stroke(); });
+    c.fillStyle = 'rgba(155,231,255,0.55)'; c.font = '8px sans-serif'; c.textAlign = 'center';
+    c.fillText('30°', cx, cx - R * 2 / 3 + 9); c.fillText('60°', cx, cx - R / 3 + 9);
+    // cruz N-S / E-O (rota con el teléfono)
+    c.strokeStyle = 'rgba(80,200,255,0.3)';
+    [0, 90].forEach(az => { const a = P(az, R), b = P(az + 180, R); c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke(); });
+    // marcas cada 10° y letras
+    for (let az = 0; az < 360; az += 10) {
+      const a = P(az, R), b = P(az, R + (az % 90 === 0 ? 0 : (az % 30 === 0 ? 6 : 3)));
+      c.strokeStyle = 'rgba(155,231,255,0.6)'; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
+    }
+    c.font = 'bold 14px sans-serif'; c.textBaseline = 'middle';
+    [['N', 0, '#ff5a5a'], ['E', 90, '#ffd600'], ['S', 180, '#ffd600'], ['O', 270, '#ffd600']].forEach(q => { const p = P(q[1], R + 14); c.fillStyle = q[2]; c.fillText(q[0], p[0], p[1]); });
+    // barrido de radar
+    if (c.createConicGradient) {
+      const ph = (t / 2500 % 1) * Math.PI * 2, sp = 0.9, f = sp / (Math.PI * 2), g = c.createConicGradient(ph - sp, cx, cx);
+      g.addColorStop(0, 'rgba(57,255,136,0)'); g.addColorStop(f, 'rgba(57,255,136,0.28)'); g.addColorStop(Math.min(0.999, f + 0.002), 'rgba(57,255,136,0)'); g.addColorStop(1, 'rgba(57,255,136,0)');
+      c.fillStyle = g; c.beginPath(); c.moveTo(cx, cx); c.arc(cx, cx, R, 0, 7); c.fill();
+    }
+    // otros satélites sobre el horizonte
+    c.fillStyle = 'rgba(130,220,255,0.85)';
+    for (let i = 0; i < blips.length && i < 80; i++) {
+      const o = blips[i]; if (target && o.sat === target.sat) continue;
+      const p = P(o.az, (90 - o.el) / 90 * R); c.beginPath(); c.arc(p[0], p[1], 2.2, 0, 7); c.fill();
+    }
+    // flecha + objetivo
+    if (target) {
+      const col = ok ? '#39ff88' : '#ffd600', up = target.el > 0, rad = up ? (90 - target.el) / 90 * R : R;
+      const tip = P(target.az, R * 0.93), base = P(target.az, 12), perp = (target.az - h + 90) * D2R;
+      c.strokeStyle = col; c.fillStyle = col; c.lineWidth = 4; c.lineCap = 'round';
+      if (ok) { c.shadowColor = col; c.shadowBlur = 14; }
+      c.beginPath(); c.moveTo(base[0], base[1]); c.lineTo(tip[0], tip[1]); c.stroke();
+      const ang = (target.az - h) * D2R, hx = Math.sin(ang), hy = -Math.cos(ang), bx = tip[0] - hx * 14, by = tip[1] - hy * 14, nx = Math.sin(perp) * 7, ny = -Math.cos(perp) * 7;
+      c.beginPath(); c.moveTo(tip[0] + hx * 4, tip[1] + hy * 4); c.lineTo(bx + nx, by + ny); c.lineTo(bx - nx, by - ny); c.closePath(); c.fill();
+      c.shadowBlur = 0;
+      const p = P(target.az, rad), pulse = 1 + 0.25 * Math.sin(t / 180);
+      if (up) { c.beginPath(); c.arc(p[0], p[1], 7 * pulse, 0, 7); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.beginPath(); c.arc(p[0], p[1], 11 * pulse, 0, 7); c.stroke(); }
+      else { c.strokeStyle = col; c.lineWidth = 2; c.beginPath(); c.arc(p[0], p[1], 7, 0, 7); c.stroke(); }
+    }
+    // frente del teléfono (fijo arriba)
+    c.fillStyle = ok ? '#39ff88' : '#fff'; c.beginPath(); c.moveTo(cx, 2); c.lineTo(cx - 6, 14); c.lineTo(cx + 6, 14); c.closePath(); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,0.35)'; c.setLineDash([3, 4]); c.lineWidth = 1; c.beginPath(); c.moveTo(cx, 14); c.lineTo(cx, cx - 14); c.stroke(); c.setLineDash([]);
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(cx, cx, 3, 0, 7); c.fill();
+  }
+
+  /* ---------- panel de estado ---------- */
+  function set(id, v) { const e = $(id); if (e && e.textContent !== v) e.textContent = v; }
+  function status() {
+    const big = $('rdBig'); if (!big) return;
+    set('rdCal', (cfg.cal >= 0 ? '+' : '') + cfg.cal.toFixed(0) + '°' + (decl ? ' (decl. ' + decl.toFixed(1) + '°)' : ''));
+    if (note && Date.now() - noteT > 7000) { note = ''; set('rdNote', ''); }
+    if (!obs) { big.className = 'no'; set('rdBig', 'SIN UBICACIÓN'); set('rdNote', 'Esperando GPS… Si no llega, tocá ACTUALIZAR GPS.'); return; }
+    if (!target) { big.className = ''; set('rdBig', 'BUSCANDO SATÉLITE…'); return; }
+    const d = diffAz(), ad = Math.abs(d), up = target.el > 0;
+    set('rdName', (target.sat.name || '—').trim().slice(0, 22));
+    set('rdDist', Math.round(target.r).toLocaleString('es-AR') + ' km');
+    set('rdEl', target.el.toFixed(0) + '°' + (up ? '' : ' (bajo horizonte)'));
+    set('rdAz', Math.round(target.az) + '° ' + dirOf(target.az));
+    set('rdHdg', hasSensor ? Math.round(H()) + '° ' + dirOf(H()) : 'sin brújula');
+    set('rdRate', (1000 / interval(target.r)).toFixed(1) + ' bips/s');
+    let cls = '', msg;
+    if (!up) { cls = 'no'; msg = 'BAJO EL HORIZONTE · ' + dirOf(target.az); }
+    else if (!hasSensor) { cls = ''; msg = 'SIN BRÚJULA · mirá al ' + dirOf(target.az) + ' a ' + Math.round(target.el) + '°'; }
+    else if (ad <= TOL) { cls = 'ok'; msg = '✓ APUNTAMIENTO CORRECTO'; }
+    else msg = (d > 0 ? 'GIRÁ A LA DERECHA ' : 'GIRÁ A LA IZQUIERDA ') + (d > 0 ? '→ ' : '← ') + Math.round(ad) + '°';
+    big.className = cls; set('rdBig', msg);
+    if (!note) {
+      let n = '';
+      if (selFallback) n = 'No hay satélite seleccionado en el mapa: usando el más cercano.';
+      else if (!hasSensor && Date.now() - openT > 2500) n = 'No llegan datos de brújula: el radar queda orientado al Norte.';
+      else if (hasSensor && up && tilt != null && tilt > -20) n = 'Inclinación del teléfono: ' + Math.round(tilt) + '° · satélite a ' + Math.round(target.el) + '°';
+      set('rdNote', n);
+    }
+    const mb = $('rdMode'); if (mb) { mb.textContent = '🎯 OBJETIVO: ' + (cfg.mode === 'sel' ? 'SELECCIONADO' : 'AUTO (más cercano)'); mb.classList.toggle('on', cfg.mode === 'sel'); }
+    const sb = $('rdSound'); if (sb) { sb.textContent = cfg.sound ? '🔊 SONIDO: SÍ' : '🔇 SONIDO: NO'; sb.classList.toggle('on', cfg.sound); }
+    const st = $('rdStar'); if (st) { st.textContent = 'STARLINK: ' + (cfg.starlink ? 'SÍ' : 'NO'); st.classList.toggle('on', cfg.starlink); }
+  }
+
+  /* ---------- ciclo de vida ---------- */
+  let openT = 0;
+  function loop(t) {
+    if (!isOpen) return; raf = requestAnimationFrame(loop);
+    if (t - tScan > 1000) { tScan = t; scan(); }
+    upd(); draw(t);
+    if (t - tStat > 250) { tStat = t; status(); }
+  }
+  async function wakeOn() { try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (e) {} }
+  function openRadar() {
+    $('radarModal').classList.add('show'); isOpen = true; openT = Date.now(); hasSensor = false; hdg = null;
+    initAudio(); startSensors(); updDecl(); locate(); wakeOn(); scan(); status();
+    cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
+    if (!obs) flash('Buscando tu ubicación por GPS…');
+  }
+  function closeRadar() {
+    isOpen = false; $('radarModal').classList.remove('show'); cancelAnimationFrame(raf); detach();
+    if (watchId != null) { try { navigator.geolocation.clearWatch(watchId); } catch (e) {} watchId = null; }
+    try { if (wake) wake.release(); } catch (e) {} wake = null;
+  }
+  document.addEventListener('visibilitychange', () => { if (isOpen && !document.hidden) { wakeOn(); initAudio(); } });
+  $('btnRadar').addEventListener('click', openRadar);
+  $('rdX').addEventListener('click', closeRadar);
+  $('radarModal').addEventListener('click', e => { if (e.target === $('radarModal')) closeRadar(); });
+  $('radarCard').addEventListener('click', ev => {
+    const b = ev.target.closest('[data-a]'); if (!b) return;
+    const a = b.dataset.a; initAudio();
+    if (a === 'sound') { cfg.sound = !cfg.sound; if (cfg.sound) beep(880, 0.08, 0.3); }
+    else if (a === 'mode') { cfg.mode = cfg.mode === 'sel' ? 'auto' : 'sel'; scan(); }
+    else if (a === 'star') { cfg.starlink = !cfg.starlink; scan(); }
+    else if (a === 'gps') { locate(); flash('Actualizando ubicación…'); }
+    else if (a === 'fix') {
+      if (!hasSensor || !target) flash('Hace falta brújula y un satélite como objetivo.');
+      else { cfg.cal = norm180(target.az - norm360(hdg + decl)); flash('Calibrado: corrección ' + cfg.cal.toFixed(0) + '°'); }
+    }
+    else if (a === 'sun') {
+      const s = sunAzEl();
+      if (!hasSensor) flash('No hay datos de brújula.');
+      else if (!s || s.el <= 0) flash('El Sol está bajo el horizonte: usá “FIJAR” con un satélite visible.');
+      else { cfg.cal = norm180(s.az - norm360(hdg + decl)); flash('Calibrado con el Sol (acimut ' + Math.round(s.az) + '°): corrección ' + cfg.cal.toFixed(0) + '°'); }
+    }
+    else if (a === 'cm') cfg.cal = norm180(cfg.cal - 1);
+    else if (a === 'cp') cfg.cal = norm180(cfg.cal + 1);
+    else if (a === 'reset') cfg.cal = 0;
+    sv('radarCfg', cfg); status();
+  });
+})();
+  </script>
+  <div id="buildTag" style="position:fixed;left:6px;bottom:3px;z-index:3000;font:700 9px/1 monospace;color:#7dffc8;opacity:.75;pointer-events:none;text-shadow:0 0 3px #000">BUILD 43 · radar satelital</div>
 </body>
 </html>
