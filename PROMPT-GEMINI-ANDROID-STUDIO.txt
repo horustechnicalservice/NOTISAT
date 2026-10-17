@@ -1,0 +1,17 @@
+Actuá como desarrollador Android senior (Kotlin). Mi app es un WebView que carga una web (Centinela UFO) y ya tiene un puente JavaScript expuesto como `window.Android` (clase NotifBridge) con estos métodos que NO debés romper ni renombrar: showNotification(title, body), scheduleAlerts(json), cancelAlerts(), scheduleTestAlert(seconds), requestNotificationPermission(), ensureBackgroundPermissions(), getStatus(). También existe un AlertReceiver con AlarmManager. Abrí esos archivos y modificá lo existente en lugar de crear clases paralelas.
+
+OBJETIVO: que la web pueda leer la ubicación GPS del teléfono.
+
+1) AndroidManifest.xml: agregá <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/> y ACCESS_COARSE_LOCATION. NO agregues ACCESS_BACKGROUND_LOCATION (solo se necesita la ubicación con la app abierta). No dupliques permisos que ya estén.
+
+2) WebView (MainActivity): settings.javaScriptEnabled = true, domStorageEnabled = true, setGeolocationEnabled(true). En el WebChromeClient sobrescribí onGeolocationPermissionsShowPrompt(origin, callback): si el permiso ya está concedido, callback.invoke(origin, true, false); si no, pedí los permisos en tiempo de ejecución con ActivityResultContracts.RequestMultiplePermissions (FINE + COARSE) y luego invocá el callback con el resultado.
+
+3) NotifBridge, agregá con @JavascriptInterface:
+ - requestLocationPermission(): pide FINE y COARSE si faltan (en el hilo principal) y, cuando se concedan, llama a pushLocation().
+ - getLocation(): String → JSON {"lat":..,"lon":..,"alt":..,"acc":..,"t":..} con la última ubicación conocida (FusedLocationProviderClient.lastLocation, o LocationManager como respaldo). Devolvé "" si no hay permiso o ubicación. Alt en KILÓMETROS.
+ - getDeclination(lat: Double, lon: Double, alt: Double): Float → usando android.hardware.GeomagneticField (grados).
+ - Modificá getStatus() para sumar el campo "location": true/false (permiso concedido).
+ - pushLocation(): pide una ubicación nueva (getCurrentLocation, Priority.PRIORITY_BALANCED_POWER_ACCURACY) y la envía a la web con webView.evaluateJavascript("window.__onNativeLocation('" + json + "')", null) siempre en el hilo principal.
+ Si hace falta, agregá la dependencia com.google.android.gms:play-services-location en build.gradle (usá la última versión estable) o usá solo LocationManager si preferís no depender de Play Services.
+
+4) No bloquees el hilo principal, manejá SecurityException, y no uses APIs deprecadas. Mostrame los archivos completos modificados (Manifest, MainActivity, NotifBridge, build.gradle) y un resumen de lo que cambiaste.

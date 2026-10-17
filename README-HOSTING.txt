@@ -127,3 +127,61 @@ NOTA v38 (identificación instantánea al cruzar la línea amarilla):
 - Vigilancia previa (WATCH_BOX ≈ 400 km alrededor de Argentina): todo satélite del catálogo que se acerca se dibuja ANTES
   de entrar, aunque no entre en el tope de 55; se quita al alejarse.
 - No pisa lo que estás mirando: si ya tenés un satélite seleccionado que sigue sobre Argentina, solo se actualiza la lista.
+
+NOTA v30 (lineas de orbita solo cerca de Argentina):
+- La linea de orbita de cada satelite se dibuja unicamente desde 2 min antes de tocar el territorio argentino
+  y mientras esta sobre el. Fuera de ese lapso no se dibuja (el icono si se sigue mostrando).
+  Ajuste en index.html: ORBIT_LINE_LEAD_SEC (120 s). Service worker: centinela-v43.
+- Se mantienen las alertas/notificaciones de Misiones y su prioridad tal como estaban.
+
+NOTA v31 (3 minutos, notificaciones y lineas sincronizadas):
+- Las notificaciones avisan 3 min antes (MIS_ALERT.leadMin = 3, antes 6).
+- Las lineas de orbita se dibujan desde 3 min antes de tocar Argentina: usan el MISMO valor (MIS_ALERT.leadMin),
+  asi que si cambias leadMin cambian los dos a la vez. Reemplaza lo indicado como 2 min / ORBIT_LINE_LEAD_SEC en la nota v30.
+- Service worker: centinela-v44.
+
+NOTA v32 (texto del contador):
+- El cartel inferior ahora dice: "N satelites, en transito hacia la Republica Argentina - Las lineas orbitales se
+  dibujan, tres minutos antes de que los satelites detecten el territorio Argentino."
+- Service worker: centinela-v45.
+
+NOTA v33 (6 minutos):
+- Las notificaciones avisan 6 min antes (MIS_ALERT.leadMin = 6, antes 3).
+- Las lineas de orbita se dibujan desde 6 min antes de tocar Argentina (mismo valor, leadMin).
+- El cartel inferior dice "seis minutos antes".
+- Service worker: centinela-v46.
+
+NOTA v34 (MI CIELO - visibilidad desde tu ubicacion):
+- Boton amarillo con pin (a la izquierda de la campana): abre "MI CIELO". Pide el GPS (navigator.geolocation y, si existe,
+  window.Android.requestLocationPermission()/getLocation()/__onNativeLocation). Si no hay GPS: boton "USAR POSADAS (aprox.)".
+- Calcula, para TU posicion, los pasos realmente VISIBLES: satelite sobre tu horizonte minimo + iluminado por el Sol (fuera de la
+  sombra de la Tierra) + vos a oscuras (Sol bajo el horizonte). Da azimut/elevacion de aparicion, punto mas alto y desaparicion,
+  duracion, brillo estimado (magnitud aprox., +-1,5) y un grafico del cielo. Presets: Normal / Maximo alcance / Solo brillantes.
+- Avisos desde tu ubicacion: X min antes de que sea visible (5/10/15/20), con direccion y altura. Se agregan a las alarmas nativas
+  (scheduleAlerts, ids 'sky-...') junto con las de Misiones. Con la app cerrada usan la ultima ubicacion con que abriste la app.
+- Service worker: centinela-v47. Permisos del APK: ver PROMPT-GEMINI-ANDROID-STUDIO.txt.
+
+NOTA v35 (MI CIELO: mirando hacia arriba):
+- Preset por defecto "Mirando hacia arriba": solo cuenta la parte del paso a 30° o mas sobre el horizonte, busca 24 h y muestra hasta mag 6.
+  Se puede ajustar la altura minima (10/20/30/45/60) y el orden (Mejor visibilidad / Por hora).
+- "Mejor visibilidad" = altura maxima + brillo + cercania en el tiempo. El mejor paso se destaca arriba con: distancia al cenit,
+  rumbo y altura en cada momento, y grafico del cielo con CENIT y anillos de 30/60. Tambien se dibuja con su orbita en el mapa.
+- Service worker: centinela-v48.
+
+NOTA v36 (dibujo de la persona):
+- Debajo de "Altura mínima sobre el horizonte" hay un dibujo de perfil: una persona parada con rayos/flechas de 10°, 20°, 30°, 45°, 60° y 90° (cenit).
+  El rayo amarillo es la altura mínima elegida (con la zona sombreada y el brazo apuntando), y el verde es el punto más alto del mejor paso.
+  Se redibuja al cambiar la altura mínima. Referencia: 1 puño a brazo extendido ≈ 10°. Service worker: centinela-v49.
+
+NOTA v37 (RADAR SATELITAL):
+- Boton verde con antena (a la izquierda de MI CIELO): abre el RADAR. Usa el GPS (mismo que MI CIELO) y la brujula del telefono
+  (deviceorientationabsolute / webkitCompassHeading). Mantiene la pantalla encendida mientras esta abierto.
+- Sensor de proximidad por sonido: un bip cuyo RITMO (no el volumen) depende de la distancia real al satelite:
+  >= 4000 km -> 1 bip cada 2 s · 400 km o menos -> ~11 bips/s. Tono agudo cuando esta sobre el horizonte, grave si esta bajo el horizonte,
+  y mas agudo todavia cuando el apuntamiento es correcto. Ajuste: funcion interval() dentro del script RADAR.
+- Objetivo: AUTO (el mas cercano sobre el horizonte) o SELECCIONADO (el que tocaste en el mapa). Se puede excluir Starlink.
+- Radar: rosa N/E/S/O que gira con el telefono, anillos de 30/60 grados de elevacion, barrido, puntos de los demas satelites y una
+  flecha hacia el objetivo. Si la flecha queda arriba (+-10 grados, constante TOL) dice "APUNTAMIENTO CORRECTO".
+- Calibracion: los sensores magneticos tienen error (declinacion en Misiones ~10 grados O). Calibrar con "FIJAR" (apuntando a un
+  satelite visible) o "CON EL SOL"; ajuste fino +-1 grado. Si el APK expone Android.getDeclination(lat,lon,alt) se aplica solo.
+- El audio necesita un toque del usuario: se activa al abrir el radar. Service worker: centinela-v50.
